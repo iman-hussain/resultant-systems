@@ -33,10 +33,13 @@
   const DESKTOP_MAX_SPAN = 1800;
   const STACK_GAP_PX = 22;
   const STACK_GAP_SHORT_PX = 12;
-  const ROAM_MS = 900;
-  const SNAP_MS = 100;
+  const ROAM_MS = 1000;
+  const SNAP_MS = 1000;
   const GRAB_RADIUS = 48;
-  const MAX_SPEED = 55;
+  const MAX_SPEED = 42;
+  /** Underdamped spring for drag-release snap-back (overshoots, then settles). */
+  const RETURN_STIFFNESS = 260;
+  const RETURN_DAMPING = 14;
 
   const PHASE = {
     ROAM: "roam",
@@ -60,6 +63,8 @@
   let revealed = false;
   let raf = 0;
   let pendingLayout = false;
+  /** At snap start: were any free dots still in/below the content band? */
+  let snapHadDotsInContent = false;
   const wordmarkSelect = document.getElementById("wordmark-select");
   const wordmarkSelectText = wordmarkSelect?.querySelector(".wordmark-select-text");
   const DRAG_THRESHOLD = 8;
@@ -93,8 +98,10 @@
     };
   }
 
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+  /** Soft start, decisive settle — reads better on a longer snap. */
+  function easeInOutCubic(t) {
+    const x = Math.min(1, Math.max(0, t));
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
   }
 
   function mix(a, b, t) {
@@ -134,39 +141,117 @@
     return octx.measureText(text).width;
   }
 
+  function widestLineWidth(probe, lines, size) {
+    probe.font = `700 ${size}px ${WORDMARK_FONT}`;
+    return Math.max(...lines.map((l) => measureLine(probe, l, size)));
+  }
+
+  /** Emergency phone-landscape: wordmark left, blurb + buttons right */
+  function buildShortLandscapeLetterTargets(padX) {
+    const lines = MOBILE_LINES;
+    const colGap = Math.max(16, width * 0.025);
+    const band = width - padX * 2;
+    const leftMax = band * 0.44;
+    const availableH = height - Math.max(12, height * 0.06);
+    const stackGap = STACK_GAP_SHORT_PX;
+    const probe = document.createElement("canvas").getContext("2d");
+
+    let fontSize = (availableH / (lines.length * 1.15)) * 0.92;
+    let widest = widestLineWidth(probe, lines, fontSize);
+    if (widest > leftMax && widest > 0) {
+      fontSize *= leftMax / widest;
+      widest = widestLineWidth(probe, lines, fontSize);
+    }
+    fontSize *= 0.98;
+    widest = widestLineWidth(probe, lines, fontSize);
+
+    const lineHeight = fontSize * 1.15;
+    const blockH = lineHeight * lines.length;
+    const leftColW = Math.ceil(widest);
+    const leftColStart = padX;
+    const startY = height / 2 - blockH / 2 + lineHeight / 2;
+    const glyphBottom = startY + (lines.length - 1) * lineHeight + fontSize * 0.5;
+    const glyphTop = startY - fontSize * 0.5;
+
+    const letters = [];
+    let maxLineW = 0;
+    lines.forEach((line, lineIndex) => {
+      const lineW = measureLine(probe, line, fontSize);
+      maxLineW = Math.max(maxLineW, lineW);
+      const lineStart = leftColStart + (leftColW - lineW) / 2;
+      const y = startY + lineIndex * lineHeight;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === " ") continue;
+        const before = measureLine(probe, line.slice(0, i), fontSize);
+        const after = measureLine(probe, line.slice(0, i + 1), fontSize);
+        letters.push({
+          char,
+          tx: lineStart + (before + after) / 2,
+          ty: y,
+          fontSize,
+        });
+      }
+    });
+
+    const contentLeft = leftColStart + leftColW + colGap;
+    const contentWidth = Math.max(120, width - contentLeft - padX);
+
+    titleLayout = {
+      fontSize,
+      width: maxLineW,
+      top: glyphTop,
+      bottom: glyphBottom,
+    };
+
+    const root = document.documentElement.style;
+    root.setProperty("--title-width", `${Math.round(contentWidth)}px`);
+    root.setProperty("--title-bottom", `${Math.round(glyphBottom)}px`);
+    root.setProperty("--stack-gap", `${stackGap}px`);
+    root.setProperty("--content-top", "0px");
+    root.setProperty("--content-left", `${Math.round(contentLeft)}px`);
+    root.setProperty("--content-width", `${Math.round(contentWidth)}px`);
+    root.setProperty("--page-pad", `${Math.round(padX)}px`);
+    root.setProperty("--wordmark-size", `${fontSize}px`);
+    document.documentElement.classList.add("is-short-viewport");
+
+    syncMobileType(fontSize, contentWidth, true);
+    syncWordmarkSelect(true, fontSize, glyphTop, maxLineW, {
+      left: leftColStart,
+      width: leftColW,
+    });
+
+    return letters;
+  }
+
   function buildLetterTargets() {
     const padX = Math.max(20, width * 0.04);
     const band = width - padX * 2;
     const maxWidth = isMobileLayout() ? band : Math.min(band, DESKTOP_MAX_SPAN);
     const mobile = isMobileLayout();
     const short = mobile && isShortViewport();
+    if (short) {
+      return buildShortLandscapeLetterTargets(padX);
+    }
+
+    document.documentElement.classList.remove("is-short-viewport");
+    document.documentElement.style.removeProperty("--content-left");
+    document.documentElement.style.removeProperty("--content-width");
+
     const lines = mobile ? MOBILE_LINES : [FULL_TEXT];
-    const stackGap = short ? STACK_GAP_SHORT_PX : STACK_GAP_PX;
-    const availableH = height * (mobile ? (short ? 0.24 : 0.36) : 0.28);
+    const stackGap = STACK_GAP_PX;
+    const availableH = height * (mobile ? 0.36 : 0.28);
 
     let fontSize = mobile
-      ? Math.min(width * (short ? 0.14 : 0.2), availableH / (lines.length * 1.15))
+      ? Math.min(width * 0.2, availableH / (lines.length * 1.15))
       : Math.min(maxWidth * 0.085, availableH);
 
     const probe = document.createElement("canvas").getContext("2d");
 
-    const widestAt = (size) => {
-      probe.font = `700 ${size}px ${WORDMARK_FONT}`;
-      return Math.max(...lines.map((l) => measureLine(probe, l, size)));
-    };
-
-    let widest = widestAt(fontSize);
+    let widest = widestLineWidth(probe, lines, fontSize);
     if (widest > 0) {
       fontSize *= maxWidth / widest;
-      widest = widestAt(fontSize);
-    }
-    // Short viewports: don't let width-fit inflate past the height budget
-    if (short) {
-      const maxByHeight = availableH / (lines.length * 1.15);
-      if (fontSize > maxByHeight) {
-        fontSize = maxByHeight;
-        widest = widestAt(fontSize);
-      }
+      widest = widestLineWidth(probe, lines, fontSize);
     }
     fontSize *= 0.98;
     probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
@@ -175,11 +260,7 @@
     const blockH = lineHeight * lines.length;
 
     let startY;
-    if (mobile && short) {
-      // Pin nearer the top so blurb + actions still fit in landscape
-      const topPad = Math.max(6, height * 0.03);
-      startY = topPad + fontSize * 0.5;
-    } else if (mobile) {
+    if (mobile) {
       // Vertically center the wordmark in the top half of the viewport
       const halfH = height * 0.5;
       const centerY = halfH * 0.5;
@@ -238,27 +319,37 @@
     );
     document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
-    document.documentElement.classList.toggle("is-short-viewport", short);
     if (mobile) {
-      syncMobileType(fontSize, maxLineW, short);
+      syncMobileType(fontSize, maxLineW, false);
     } else {
       clearMobileTypeOverrides();
       fitBlurbToTitle(maxLineW);
     }
-    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW);
+    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW, null);
 
     return letters;
   }
 
-  function syncWordmarkSelect(mobile, fontSize, top, maxLineW) {
+  function syncWordmarkSelect(mobile, fontSize, top, maxLineW, shortLayout) {
     if (!wordmarkSelect || !wordmarkSelectText) return;
     wordmarkSelectText.classList.toggle("is-stacked", !!mobile);
     wordmarkSelectText.innerHTML = mobile
       ? "Resultant<br />Systems<br />Limited"
       : "Resultant Systems Limited";
     wordmarkSelect.style.top = `${Math.max(0, top)}px`;
-    wordmarkSelect.style.width = `${Math.ceil(maxLineW)}px`;
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
+
+    if (shortLayout) {
+      wordmarkSelect.style.left = `${shortLayout.left}px`;
+      wordmarkSelect.style.transform = "none";
+      wordmarkSelect.style.width = `${Math.ceil(shortLayout.width)}px`;
+      wordmarkSelect.style.maxWidth = "none";
+    } else {
+      wordmarkSelect.style.left = "";
+      wordmarkSelect.style.transform = "";
+      wordmarkSelect.style.width = `${Math.ceil(maxLineW)}px`;
+      wordmarkSelect.style.maxWidth = "";
+    }
   }
 
   function setWordmarkSelectActive(active) {
@@ -287,15 +378,28 @@
 
   function syncMobileType(titleFont, titleWidth, short = false) {
     const blurb = content.querySelector(".blurb");
-    const mobile = content.querySelector(".blurb-mobile");
+    const mobileBlurb = content.querySelector(".blurb-mobile");
     const root = document.documentElement.style;
     const type = short ? MOBILE_TYPE_SHORT : MOBILE_TYPE;
     let blurbPx = titleFont * type.blurb;
     const btnPx = titleFont * type.btn;
 
+    if (short) {
+      // Landscape right column: wrap naturally; size for readability in the column
+      blurbPx = Math.min(Math.max(titleFont * 0.22, 13), 18);
+      if (blurb) blurb.style.fontSize = `${blurbPx.toFixed(2)}px`;
+      const btnH = Math.min(Math.max(titleFont * 0.42, 32), 44);
+      root.setProperty("--btn-font", `${Math.min(btnPx, 15).toFixed(2)}px`);
+      root.setProperty("--btn-h", `${btnH.toFixed(2)}px`);
+      root.setProperty("--btn-pad-x", `${(btnH * 0.35).toFixed(2)}px`);
+      root.setProperty("--btn-gap", `${Math.max(8, titleFont * 0.12).toFixed(2)}px`);
+      root.setProperty("--company-font", `${Math.min(titleFont * 0.18, 12).toFixed(2)}px`);
+      return;
+    }
+
     // Keep the three hard lines from wrapping (which would become 4+ visual lines)
-    if (blurb && mobile && titleWidth > 0) {
-      const lines = mobile.innerHTML
+    if (blurb && mobileBlurb && titleWidth > 0) {
+      const lines = mobileBlurb.innerHTML
         .split(/<br\s*\/?>/i)
         .map((s) =>
           s
@@ -357,7 +461,7 @@
     const targets = buildLetterTargets();
     particles = targets.map((t) => {
       const angle = Math.random() * Math.PI * 2;
-      const speed = 25 + Math.random() * 30;
+      const speed = 14 + Math.random() * 22;
       return {
         char: t.char,
         tx: t.tx,
@@ -637,6 +741,8 @@
         p.formed = false;
         p.ox = p.x;
         p.oy = p.y;
+        p.vx = 0;
+        p.vy = 0;
       }
       // Tap without drag: leave letter in place (selection may copy)
     } else {
@@ -679,8 +785,8 @@
     for (const p of particles) {
       if (p.held) continue;
       applyPointerForce(p, dt);
-      p.vx += (Math.random() - 0.5) * 40 * dt;
-      p.vy += (Math.random() - 0.5) * 40 * dt;
+      p.vx += (Math.random() - 0.5) * 28 * dt;
+      p.vy += (Math.random() - 0.5) * 28 * dt;
       const speed = Math.hypot(p.vx, p.vy);
       if (speed > MAX_SPEED) {
         p.vx = (p.vx / speed) * MAX_SPEED;
@@ -708,10 +814,30 @@
         p.oy = p.y;
       }
     }
+    const stackGap =
+      isMobileLayout() && isShortViewport() ? STACK_GAP_SHORT_PX : STACK_GAP_PX;
+    const contentTop = titleLayout.bottom + stackGap;
+    snapHadDotsInContent = particles.some((p) => !p.held && p.y > contentTop);
+  }
+
+  /** True once free dots have mostly left the blurb/button band below the wordmark. */
+  function dotsClearedContentZone() {
+    const stackGap =
+      isMobileLayout() && isShortViewport() ? STACK_GAP_SHORT_PX : STACK_GAP_PX;
+    const contentTop = titleLayout.bottom + stackGap;
+    let free = 0;
+    let inZone = 0;
+    for (const p of particles) {
+      if (p.held) continue;
+      free++;
+      if (p.y > contentTop) inZone++;
+    }
+    if (free === 0) return true;
+    return inZone / free <= 0.1;
   }
 
   function updateSnap(t) {
-    const e = easeOutCubic(t);
+    const e = easeInOutCubic(t);
     for (const p of particles) {
       if (p.held) {
         p.morph = 0;
@@ -740,12 +866,20 @@
       if (p.held) continue;
 
       if (p.returning) {
-        p.x += (p.tx - p.x) * Math.min(1, 16 * dt);
-        p.y += (p.ty - p.y) * Math.min(1, 16 * dt);
-        p.morph = Math.min(1, p.morph + dt * 8);
-        if (Math.hypot(p.x - p.tx, p.y - p.ty) < 1.2 && p.morph >= 0.98) {
+        const ax = (p.tx - p.x) * RETURN_STIFFNESS - p.vx * RETURN_DAMPING;
+        const ay = (p.ty - p.y) * RETURN_STIFFNESS - p.vy * RETURN_DAMPING;
+        p.vx += ax * dt;
+        p.vy += ay * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.morph = Math.min(1, p.morph + dt * 6);
+        const dist = Math.hypot(p.x - p.tx, p.y - p.ty);
+        const speed = Math.hypot(p.vx, p.vy);
+        if (dist < 0.6 && speed < 12 && p.morph >= 0.98) {
           p.x = p.tx;
           p.y = p.ty;
+          p.vx = 0;
+          p.vy = 0;
           p.morph = 1;
           p.formed = true;
           p.returning = false;
@@ -822,9 +956,15 @@
     } else if (phase === PHASE.SNAP) {
       const t = (now - phaseStart) / SNAP_MS;
       updateSnap(t);
+      // Fade content in once dots have flown past the blurb/button band
+      if (!revealed) {
+        const cleared = dotsClearedContentZone();
+        if (snapHadDotsInContent ? cleared || t >= 0.9 : t >= 0.55) {
+          revealContent();
+        }
+      }
       if (t >= 1) {
         phase = PHASE.SETTLE;
-        revealContent();
       }
     } else {
       updateSettle(dt);

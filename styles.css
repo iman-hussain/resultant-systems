@@ -214,6 +214,10 @@ body {
   opacity: 0;
   transform: translateY(0.4rem);
   transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .content[data-revealed="true"] ~ .company-number {
@@ -404,37 +408,84 @@ body {
   }
 }
 
-/* Phone landscape / short chrome: tighten CSS gaps JS doesn't fully control */
-@media (max-height: 500px) {
-  :root {
-    --stack-gap: 12px;
-  }
+/* Emergency phone landscape only (toggled by JS: mobile + short height) */
+html.is-short-viewport .stage {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+}
 
-  .content {
-    margin-bottom: 0.5rem;
-  }
+html.is-short-viewport .content {
+  position: fixed;
+  left: var(--content-left);
+  top: 50%;
+  width: var(--content-width);
+  max-width: none;
+  margin: 0;
+  text-align: left;
+  transform: translateY(calc(-50% + 0.6rem));
+  z-index: 1;
+}
 
-  .stage {
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
-  }
+html.is-short-viewport .content[data-revealed="true"] {
+  transform: translateY(-50%);
+}
 
-  .company-number {
-    margin-top: 0.5rem;
-    padding-top: 0.35rem;
-  }
+html.is-short-viewport .blurb {
+  margin: 0 0 var(--stack-gap);
+  text-align: left;
+}
 
-  /* Prevent wide landscape title from blowing up square icon buttons */
-  .icon-btn {
-    aspect-ratio: auto;
-    height: var(--btn-h);
-    min-height: var(--btn-h);
-    max-height: var(--btn-h);
-  }
+html.is-short-viewport .blurb-mobile {
+  display: none;
+}
 
-  .icon-btn svg {
-    width: 48%;
-    height: 48%;
-    max-width: 1.25rem;
-    max-height: 1.25rem;
-  }
+html.is-short-viewport .blurb-desktop {
+  display: block;
+  white-space: normal;
+}
+
+html.is-short-viewport .actions {
+  align-items: stretch;
+  width: 100%;
+}
+
+html.is-short-viewport .icon-btn {
+  aspect-ratio: auto;
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  max-height: var(--btn-h);
+}
+
+html.is-short-viewport .icon-btn svg {
+  width: 48%;
+  height: 48%;
+  max-width: 1.25rem;
+  max-height: 1.25rem;
+}
+
+html.is-short-viewport .company-number {
+  position: fixed;
+  left: var(--content-left);
+  bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
+  width: var(--content-width);
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+html.is-short-viewport .wordmark-select {
+  left: auto;
+  transform: none;
+  max-width: none;
+}
+
+html.is-short-viewport .wordmark-select-text {
+  text-align: center;
 }
