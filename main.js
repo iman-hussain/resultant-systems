@@ -7,15 +7,18 @@
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const isNarrow = () => window.matchMedia("(max-width: 720px)").matches;
 
-  const ROAM_MS = 500;
-  const SINGULARITY_MS = 450;
-  const BANG_MS = 700;
-  const GRAB_RADIUS = 28;
+  const WORDMARK_FONT = '"Google Sans", "Google Sans Variable", "Segoe UI", sans-serif';
+  const FULL_TEXT = "Resultant Systems Limited";
+  const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
+
+  const ROAM_MS = 900;
+  const SNAP_MS = 100;
+  const GRAB_RADIUS = 48;
+  const MAX_SPEED = 55;
 
   const PHASE = {
     ROAM: "roam",
-    SINGULARITY: "singularity",
-    BANG: "bang",
+    SNAP: "snap",
     SETTLE: "settle",
   };
 
@@ -26,8 +29,7 @@
   let phase = PHASE.ROAM;
   let phaseStart = 0;
   let startTime = 0;
-  let center = { x: 0, y: 0 };
-  let letterTargets = [];
+  let titleLayout = { fontSize: 48, width: 0, bottom: 0 };
   let grabbed = null;
   let pointer = { x: -9999, y: -9999, active: false };
   let colors = { bg: "#0a0a0a", dot: "#f2f2f0", hot: "#9ec8ff" };
@@ -43,354 +45,8 @@
     };
   }
 
-  function particleCount() {
-    const area = width * height;
-    const base = Math.round(area / 1400);
-    return Math.max(350, Math.min(isNarrow() ? 900 : 1400, base));
-  }
-
   function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
-
-  function easeInOutCubic(t) {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  }
-
-  function sampleLetterTargets() {
-    const off = document.createElement("canvas");
-    const octx = off.getContext("2d");
-    const padX = Math.max(24, width * 0.06);
-    const topPad = Math.max(40, height * 0.12);
-    const availableH = height * 0.48;
-
-    off.width = Math.max(1, Math.floor(width));
-    off.height = Math.max(1, Math.floor(height));
-    octx.clearRect(0, 0, off.width, off.height);
-    octx.fillStyle = "#fff";
-    octx.textAlign = "center";
-    octx.textBaseline = "middle";
-
-    const lines = isNarrow()
-      ? ["Resultant", "Systems", "Limited"]
-      : ["Resultant Systems Limited"];
-
-    const maxWidth = width - padX * 2;
-    let fontSize = isNarrow()
-      ? Math.min(width * 0.18, availableH / (lines.length * 1.15))
-      : Math.min(width * 0.09, availableH * 0.55);
-
-    octx.font = `700 ${fontSize}px "Instrument Sans", "Segoe UI", sans-serif`;
-
-    if (!isNarrow()) {
-      while (fontSize > 18 && octx.measureText(lines[0]).width > maxWidth) {
-        fontSize -= 2;
-        octx.font = `700 ${fontSize}px "Instrument Sans", "Segoe UI", sans-serif`;
-      }
-    } else {
-      const widest = Math.max(...lines.map((l) => octx.measureText(l).width));
-      if (widest > maxWidth) {
-        fontSize *= maxWidth / widest;
-        octx.font = `700 ${fontSize}px "Instrument Sans", "Segoe UI", sans-serif`;
-      }
-    }
-
-    const lineHeight = fontSize * 1.12;
-    const blockH = lineHeight * lines.length;
-    const startY = topPad + (availableH - blockH) / 2 + lineHeight / 2;
-
-    lines.forEach((line, i) => {
-      octx.fillText(line, width / 2, startY + i * lineHeight);
-    });
-
-    const image = octx.getImageData(0, 0, off.width, off.height).data;
-    const points = [];
-    const step = Math.max(2, Math.floor(Math.min(width, height) / 280));
-
-    for (let y = 0; y < off.height; y += step) {
-      for (let x = 0; x < off.width; x += step) {
-        const i = (y * off.width + x) * 4;
-        if (image[i + 3] > 128) {
-          points.push({
-            x: x + (Math.random() - 0.5) * step * 0.35,
-            y: y + (Math.random() - 0.5) * step * 0.35,
-          });
-        }
-      }
-    }
-
-    if (!points.length) {
-      points.push({ x: width / 2, y: height * 0.3 });
-    }
-
-    return points;
-  }
-
-  function assignTargets() {
-    letterTargets = sampleLetterTargets();
-    const count = particles.length;
-    for (let i = 0; i < count; i++) {
-      const t = letterTargets[i % letterTargets.length];
-      particles[i].tx = t.x;
-      particles[i].ty = t.y;
-    }
-  }
-
-  function createParticles() {
-    const count = particleCount();
-    const list = [];
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 80 + Math.random() * 160;
-      list.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        ox: null,
-        oy: null,
-        tx: width / 2,
-        ty: height / 2,
-        r: 0.8 + Math.random() * 1.4,
-        heat: 0,
-        held: false,
-        captured: false,
-      });
-    }
-    particles = list;
-    assignTargets();
-  }
-
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    center = { x: width / 2, y: height * 0.38 };
-    readColors();
-
-    if (!particles.length) {
-      createParticles();
-    } else {
-      assignTargets();
-    }
-  }
-
-  function revealContent() {
-    if (revealed) return;
-    revealed = true;
-    content.dataset.revealed = "true";
-  }
-
-  function nearestParticle(x, y) {
-    let best = null;
-    let bestDist = GRAB_RADIUS * GRAB_RADIUS;
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      const dx = p.x - x;
-      const dy = p.y - y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 < bestDist) {
-        bestDist = d2;
-        best = p;
-      }
-    }
-    return best;
-  }
-
-  function pointerPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
-  }
-
-  function onPointerDown(e) {
-    if (phase === PHASE.SETTLE || phase === PHASE.BANG) return;
-    const pos = pointerPos(e);
-    pointer.x = pos.x;
-    pointer.y = pos.y;
-    pointer.active = true;
-    const hit = nearestParticle(pos.x, pos.y);
-    if (hit) {
-      grabbed = hit;
-      hit.held = true;
-      canvas.setPointerCapture?.(e.pointerId);
-    }
-  }
-
-  function onPointerMove(e) {
-    const pos = pointerPos(e);
-    pointer.x = pos.x;
-    pointer.y = pos.y;
-    pointer.active = true;
-    if (grabbed) {
-      grabbed.x = pos.x;
-      grabbed.y = pos.y;
-      grabbed.vx = 0;
-      grabbed.vy = 0;
-    }
-  }
-
-  function onPointerUp() {
-    if (grabbed) {
-      grabbed.held = false;
-      if (phase === PHASE.SINGULARITY && !grabbed.captured) {
-        grabbed.ox = grabbed.x;
-        grabbed.oy = grabbed.y;
-        grabbed.captured = true;
-      }
-      grabbed = null;
-    }
-  }
-
-  function onPointerLeave() {
-    pointer.active = false;
-    pointer.x = -9999;
-    pointer.y = -9999;
-  }
-
-  function applyPointerForce(p, dt) {
-    if (!pointer.active || p.held) return;
-    const dx = p.x - pointer.x;
-    const dy = p.y - pointer.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    const radius = 120;
-    if (dist < radius) {
-      const force = (1 - dist / radius) * 220;
-      const nx = -dy / dist;
-      const ny = dx / dist;
-      p.vx += nx * force * dt;
-      p.vy += ny * force * dt;
-      p.heat = Math.min(1, p.heat + (1 - dist / radius) * 0.15);
-    }
-  }
-
-  function updateRoam(dt) {
-    for (const p of particles) {
-      if (p.held) continue;
-      applyPointerForce(p, dt);
-      p.vx += (Math.random() - 0.5) * 90 * dt;
-      p.vy += (Math.random() - 0.5) * 90 * dt;
-      const speed = Math.hypot(p.vx, p.vy);
-      const maxSpeed = 220;
-      if (speed > maxSpeed) {
-        p.vx = (p.vx / speed) * maxSpeed;
-        p.vy = (p.vy / speed) * maxSpeed;
-      }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if (p.x < 0 || p.x > width) p.vx *= -1;
-      if (p.y < 0 || p.y > height) p.vy *= -1;
-      p.x = Math.max(0, Math.min(width, p.x));
-      p.y = Math.max(0, Math.min(height, p.y));
-      p.heat *= 0.92;
-    }
-  }
-
-  function updateSingularity(t, dt) {
-    const e = easeInOutCubic(Math.min(1, Math.max(0, t)));
-    for (const p of particles) {
-      if (p.held) {
-        p.heat = 1;
-        continue;
-      }
-      if (!p.captured) {
-        p.ox = p.x;
-        p.oy = p.y;
-        p.captured = true;
-      }
-      applyPointerForce(p, dt);
-      const fromX = p.ox ?? p.x;
-      const fromY = p.oy ?? p.y;
-      // After the timed collapse, keep pulling stragglers into the point
-      const progress = t >= 1 ? 1 : e;
-      const sx = fromX + (center.x - fromX) * progress;
-      const sy = fromY + (center.y - fromY) * progress;
-      const pull = t >= 1 ? Math.min(1, 20 * dt) : Math.min(1, 14 * dt);
-      p.x += (sx - p.x) * pull;
-      p.y += (sy - p.y) * pull;
-      if (t >= 1) {
-        p.x += (center.x - p.x) * Math.min(1, 16 * dt);
-        p.y += (center.y - p.y) * Math.min(1, 16 * dt);
-      }
-      p.heat = Math.max(p.heat * 0.9, e * 0.6);
-    }
-  }
-
-  function beginSingularity() {
-    phase = PHASE.SINGULARITY;
-    phaseStart = performance.now();
-    for (const p of particles) {
-      if (!p.held) {
-        p.ox = p.x;
-        p.oy = p.y;
-        p.captured = true;
-      } else {
-        p.captured = false;
-      }
-    }
-  }
-
-  function beginBang() {
-    phase = PHASE.BANG;
-    phaseStart = performance.now();
-    assignTargets();
-    for (const p of particles) {
-      p.ox = p.held ? p.x : center.x;
-      p.oy = p.held ? p.y : center.y;
-      p.x = p.ox;
-      p.y = p.oy;
-      p.held = false;
-    }
-    grabbed = null;
-  }
-
-  function updateBang(t) {
-    const e = easeOutCubic(Math.min(1, t));
-    for (const p of particles) {
-      // Overshoot outward then settle into letter — big-bang feel
-      const mid = Math.sin(Math.min(1, t) * Math.PI);
-      const burstX = center.x + (p.tx - center.x) * (1.25 + mid * 0.35);
-      const burstY = center.y + (p.ty - center.y) * (1.25 + mid * 0.35);
-      const finalX = p.ox + (p.tx - p.ox) * e;
-      const finalY = p.oy + (p.ty - p.oy) * e;
-      const blend = Math.min(1, Math.max(0, (t - 0.35) / 0.65));
-      p.x = burstX * (1 - blend) + finalX * blend;
-      p.y = burstY * (1 - blend) + finalY * blend;
-      p.heat = Math.max(0, 1 - t) * 0.85;
-    }
-  }
-
-  function updateSettle(dt) {
-    for (const p of particles) {
-      applyPointerForce(p, dt);
-      const jx = (Math.random() - 0.5) * 0.35;
-      const jy = (Math.random() - 0.5) * 0.35;
-      p.x += (p.tx + jx - p.x) * Math.min(1, 8 * dt);
-      p.y += (p.ty + jy - p.y) * Math.min(1, 8 * dt);
-      p.heat *= 0.9;
-    }
-  }
-
-  function draw() {
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, width, height);
-
-    for (const p of particles) {
-      const r = p.held ? p.r * 1.8 : p.r;
-      ctx.beginPath();
-      ctx.fillStyle = p.heat > 0.05 ? mix(colors.dot, colors.hot, p.heat) : colors.dot;
-      ctx.globalAlpha = p.held ? 1 : 0.85;
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    return 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
   }
 
   function mix(a, b, t) {
@@ -425,30 +81,357 @@
     };
   }
 
+  function measureLine(octx, text, fontSize) {
+    octx.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
+    return octx.measureText(text).width;
+  }
+
+  function buildLetterTargets() {
+    const padX = Math.max(20, width * 0.04);
+    const maxWidth = width - padX * 2;
+    const lines = isNarrow() ? MOBILE_LINES : [FULL_TEXT];
+    const availableH = height * (isNarrow() ? 0.36 : 0.28);
+
+    let fontSize = isNarrow()
+      ? Math.min(width * 0.16, availableH / (lines.length * 1.15))
+      : Math.min(width * 0.085, availableH);
+
+    const probe = document.createElement("canvas").getContext("2d");
+    probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
+
+    const fit = () => {
+      const widest = Math.max(...lines.map((l) => measureLine(probe, l, fontSize)));
+      if (widest > maxWidth) {
+        fontSize *= maxWidth / widest;
+        probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
+      }
+    };
+    fit();
+    // Extra safety shrink so nothing clips
+    fontSize *= 0.98;
+    probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
+
+    const lineHeight = fontSize * 1.15;
+    const blockH = lineHeight * lines.length;
+    const startY = height * (isNarrow() ? 0.22 : 0.3) - blockH / 2 + lineHeight / 2;
+
+    const letters = [];
+    let maxLineW = 0;
+
+    lines.forEach((line, lineIndex) => {
+      const lineW = measureLine(probe, line, fontSize);
+      maxLineW = Math.max(maxLineW, lineW);
+      const lineStart = width / 2 - lineW / 2;
+      const y = startY + lineIndex * lineHeight;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === " ") continue;
+        const before = measureLine(probe, line.slice(0, i), fontSize);
+        const after = measureLine(probe, line.slice(0, i + 1), fontSize);
+        letters.push({
+          char,
+          tx: lineStart + (before + after) / 2,
+          ty: y,
+          fontSize,
+        });
+      }
+    });
+
+    titleLayout = {
+      fontSize,
+      width: maxLineW,
+      bottom: startY + (lines.length - 1) * lineHeight + fontSize * 0.55,
+    };
+
+    document.documentElement.style.setProperty("--title-width", `${Math.ceil(maxLineW)}px`);
+    document.documentElement.style.setProperty("--title-bottom", `${Math.ceil(titleLayout.bottom)}px`);
+
+    return letters;
+  }
+
+  function createParticles() {
+    const targets = buildLetterTargets();
+    particles = targets.map((t) => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 25 + Math.random() * 30;
+      return {
+        char: t.char,
+        tx: t.tx,
+        ty: t.ty,
+        fontSize: t.fontSize,
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        ox: null,
+        oy: null,
+        heat: 0,
+        held: false,
+        formed: false,
+        morph: 0,
+      };
+    });
+  }
+
+  function refreshTargets() {
+    const targets = buildLetterTargets();
+    particles.forEach((p, i) => {
+      const t = targets[i];
+      if (!t) return;
+      p.tx = t.tx;
+      p.ty = t.ty;
+      p.fontSize = t.fontSize;
+      if (phase === PHASE.SETTLE && p.formed) {
+        p.x = p.tx;
+        p.y = p.ty;
+        p.morph = 1;
+      }
+    });
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    readColors();
+
+    if (!particles.length) createParticles();
+    else refreshTargets();
+  }
+
+  function revealContent() {
+    if (revealed) return;
+    revealed = true;
+    content.dataset.revealed = "true";
+  }
+
+  function nearestParticle(x, y) {
+    let best = null;
+    let bestDist = GRAB_RADIUS * GRAB_RADIUS;
+    for (const p of particles) {
+      if (p.formed && phase === PHASE.SETTLE) continue;
+      const dx = p.x - x;
+      const dy = p.y - y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestDist) {
+        bestDist = d2;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function onPointerDown(e) {
+    if (phase === PHASE.SETTLE) return;
+    const pos = pointerPos(e);
+    pointer.x = pos.x;
+    pointer.y = pos.y;
+    pointer.active = true;
+    const hit = nearestParticle(pos.x, pos.y);
+    if (hit && !hit.formed) {
+      grabbed = hit;
+      hit.held = true;
+      hit.formed = false;
+      hit.morph = 0;
+      canvas.setPointerCapture?.(e.pointerId);
+    }
+  }
+
+  function onPointerMove(e) {
+    const pos = pointerPos(e);
+    pointer.x = pos.x;
+    pointer.y = pos.y;
+    pointer.active = true;
+    if (grabbed) {
+      grabbed.x = pos.x;
+      grabbed.y = pos.y;
+      grabbed.vx = 0;
+      grabbed.vy = 0;
+    }
+  }
+
+  function onPointerUp() {
+    if (grabbed) {
+      grabbed.held = false;
+      if (phase === PHASE.SNAP || phase === PHASE.SETTLE) {
+        grabbed.ox = grabbed.x;
+        grabbed.oy = grabbed.y;
+      }
+      grabbed = null;
+    }
+  }
+
+  function onPointerLeave() {
+    pointer.active = false;
+    pointer.x = -9999;
+    pointer.y = -9999;
+  }
+
+  function applyPointerForce(p, dt) {
+    if (!pointer.active || p.held || p.formed) return;
+    const dx = p.x - pointer.x;
+    const dy = p.y - pointer.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const radius = 110;
+    if (dist < radius) {
+      const force = (1 - dist / radius) * 90;
+      p.vx += (-dy / dist) * force * dt;
+      p.vy += (dx / dist) * force * dt;
+      p.heat = Math.min(1, p.heat + (1 - dist / radius) * 0.12);
+    }
+  }
+
+  function updateRoam(dt) {
+    for (const p of particles) {
+      if (p.held) continue;
+      applyPointerForce(p, dt);
+      p.vx += (Math.random() - 0.5) * 40 * dt;
+      p.vy += (Math.random() - 0.5) * 40 * dt;
+      const speed = Math.hypot(p.vx, p.vy);
+      if (speed > MAX_SPEED) {
+        p.vx = (p.vx / speed) * MAX_SPEED;
+        p.vy = (p.vy / speed) * MAX_SPEED;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.x < 8 || p.x > width - 8) p.vx *= -1;
+      if (p.y < 8 || p.y > height - 8) p.vy *= -1;
+      p.x = Math.max(8, Math.min(width - 8, p.x));
+      p.y = Math.max(8, Math.min(height - 8, p.y));
+      p.heat *= 0.94;
+      p.morph = 0;
+    }
+  }
+
+  function beginSnap() {
+    phase = PHASE.SNAP;
+    phaseStart = performance.now();
+    for (const p of particles) {
+      if (!p.held) {
+        p.ox = p.x;
+        p.oy = p.y;
+      }
+    }
+  }
+
+  function updateSnap(t) {
+    const e = easeOutCubic(t);
+    for (const p of particles) {
+      if (p.held) {
+        p.morph = 0;
+        p.formed = false;
+        continue;
+      }
+      if (p.ox == null || p.oy == null) {
+        p.ox = p.x;
+        p.oy = p.y;
+      }
+      p.x = p.ox + (p.tx - p.ox) * e;
+      p.y = p.oy + (p.ty - p.oy) * e;
+      p.morph = e;
+      p.heat *= 0.9;
+      if (t >= 1) {
+        p.x = p.tx;
+        p.y = p.ty;
+        p.morph = 1;
+        p.formed = true;
+      }
+    }
+  }
+
+  function updateSettle(dt) {
+    for (const p of particles) {
+      if (p.held) continue;
+      if (!p.formed) {
+        // Late release: rush home and form
+        p.x += (p.tx - p.x) * Math.min(1, 18 * dt);
+        p.y += (p.ty - p.y) * Math.min(1, 18 * dt);
+        p.morph = Math.min(1, p.morph + dt * 10);
+        if (Math.hypot(p.x - p.tx, p.y - p.ty) < 1.5 && p.morph >= 1) {
+          p.formed = true;
+          p.x = p.tx;
+          p.y = p.ty;
+        }
+        continue;
+      }
+      applyPointerForce(p, dt);
+      const jx = (Math.random() - 0.5) * 0.25;
+      const jy = (Math.random() - 0.5) * 0.25;
+      p.x += (p.tx + jx - p.x) * Math.min(1, 10 * dt);
+      p.y += (p.ty + jy - p.y) * Math.min(1, 10 * dt);
+      p.heat *= 0.92;
+      p.morph = 1;
+    }
+  }
+
+  function drawParticle(p) {
+    const fill = p.heat > 0.04 ? mix(colors.dot, colors.hot, p.heat) : colors.dot;
+    ctx.fillStyle = fill;
+    ctx.globalAlpha = 1;
+
+    if (p.morph <= 0.02) {
+      const r = p.held ? 5.5 : 4.2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
+    const size = p.fontSize * (0.15 + 0.85 * p.morph);
+    ctx.font = `700 ${size}px ${WORDMARK_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.globalAlpha = 0.35 + 0.65 * p.morph;
+    ctx.fillText(p.char, p.x, p.y);
+
+    if (p.morph < 0.85) {
+      ctx.globalAlpha = 1 - p.morph;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4.2 * (1 - p.morph), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, width, height);
+    for (const p of particles) drawParticle(p);
+  }
+
+  function allFormedOrHeld() {
+    return particles.every((p) => p.formed || p.held);
+  }
+
   function tick(now) {
     const dt = Math.min(0.033, (now - (tick.prev || now)) / 1000) || 0.016;
     tick.prev = now;
 
     if (phase === PHASE.ROAM) {
       updateRoam(dt);
-      if (now - startTime >= ROAM_MS) beginSingularity();
-    } else if (phase === PHASE.SINGULARITY) {
-      const t = (now - phaseStart) / SINGULARITY_MS;
-      updateSingularity(t, dt);
-      const anyHeld = particles.some((p) => p.held);
-      const allNearCenter =
-        !anyHeld &&
-        particles.every((p) => Math.hypot(p.x - center.x, p.y - center.y) < 6);
-      if (t >= 1 && !anyHeld && (allNearCenter || t >= 1.35)) beginBang();
-    } else if (phase === PHASE.BANG) {
-      const t = (now - phaseStart) / BANG_MS;
-      updateBang(t);
+      if (now - startTime >= ROAM_MS) beginSnap();
+    } else if (phase === PHASE.SNAP) {
+      const t = (now - phaseStart) / SNAP_MS;
+      updateSnap(t);
       if (t >= 1) {
         phase = PHASE.SETTLE;
+        // Held letters stay as dots until released
         revealContent();
       }
     } else {
       updateSettle(dt);
+      if (!revealed && allFormedOrHeld()) revealContent();
     }
 
     draw();
@@ -461,6 +444,8 @@
     for (const p of particles) {
       p.x = p.tx;
       p.y = p.ty;
+      p.morph = 1;
+      p.formed = true;
       p.heat = 0;
     }
     draw();
@@ -470,8 +455,8 @@
       const dt = Math.min(0.033, (now - (quietLoop.prev || now)) / 1000) || 0.016;
       quietLoop.prev = now;
       for (const p of particles) {
-        p.x += (p.tx - p.x) * Math.min(1, 6 * dt);
-        p.y += (p.ty - p.y) * Math.min(1, 6 * dt);
+        p.x += (p.tx - p.x) * Math.min(1, 8 * dt);
+        p.y += (p.ty - p.y) * Math.min(1, 8 * dt);
       }
       draw();
       raf = requestAnimationFrame(quietLoop);
@@ -479,8 +464,14 @@
     raf = requestAnimationFrame(quietLoop);
   }
 
-  function start() {
+  async function start() {
     readColors();
+    try {
+      await document.fonts.load(`700 64px ${WORDMARK_FONT}`);
+      await document.fonts.ready;
+    } catch (_) {
+      /* fall back to system metrics */
+    }
     resize();
     startTime = performance.now();
     phaseStart = startTime;
@@ -490,39 +481,32 @@
       runReduced();
       return;
     }
-
     raf = requestAnimationFrame(tick);
   }
 
   window.addEventListener("resize", () => {
     cancelAnimationFrame(raf);
-    const wasPhase = phase;
     resize();
-    if (reducedMotion || wasPhase === PHASE.SETTLE) {
+    if (reducedMotion || phase === PHASE.SETTLE) {
       for (const p of particles) {
-        p.x = p.tx;
-        p.y = p.ty;
+        if (p.formed || reducedMotion) {
+          p.x = p.tx;
+          p.y = p.ty;
+          p.morph = 1;
+          p.formed = true;
+        }
       }
       draw();
       revealContent();
-      if (reducedMotion) {
-        runReduced();
-      } else {
-        phase = PHASE.SETTLE;
-        raf = requestAnimationFrame(tick);
-      }
+      phase = PHASE.SETTLE;
+      raf = requestAnimationFrame(tick);
       return;
     }
-    // Keep animation going after resize mid-flight
     raf = requestAnimationFrame(tick);
   });
 
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-    readColors();
-  });
-  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
-    readColors();
-  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
+  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", readColors);
 
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);
@@ -530,6 +514,5 @@
   canvas.addEventListener("pointercancel", onPointerUp);
   canvas.addEventListener("pointerleave", onPointerLeave);
 
-  // Content sits above canvas for clicks on buttons; title area is canvas
   start();
 })();
