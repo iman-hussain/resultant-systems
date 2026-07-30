@@ -1,0 +1,72 @@
+:root {
+  color-scheme: dark light;
+  --bg: #0a0a0a;
+  --fg: #f2f2f0;
+  --muted: rgba(242, 242, 240, 0.75);
+  --border: rgba(242, 242, 240, 0.3);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f4f2;
+    --fg: #111111;
+    --muted: rgba(17, 17, 17, 0.72);
+    --border: rgba(17, 17, 17, 0.28);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  text-align: center;
+}
+
+main {
+  max-width: 36rem;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.35rem, 4vw, 1.85rem);
+  font-weight: 650;
+}
+
+p {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+a.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.6rem;
+  padding: 0.55rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+a.primary:hover {
+  border-color: var(--fg);
+}
+
+.home {
+  display: inline-block;
+  margin-top: 1.25rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
