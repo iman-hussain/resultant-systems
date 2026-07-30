@@ -5,12 +5,11 @@
 
   const ctx = canvas.getContext("2d", { alpha: false });
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const isNarrow = () => window.matchMedia("(max-width: 720px)").matches;
 
   const WORDMARK_FONT = '"Google Sans", "Google Sans Variable", "Segoe UI", sans-serif';
   const FULL_TEXT = "Resultant Systems Limited";
   const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
-
+  const LAYOUT_BREAKPOINT = 721;
   const ROAM_MS = 900;
   const SNAP_MS = 100;
   const GRAB_RADIUS = 48;
@@ -30,11 +29,21 @@
   let phaseStart = 0;
   let startTime = 0;
   let titleLayout = { fontSize: 48, width: 0, bottom: 0 };
+  let layoutMode = null;
   let grabbed = null;
   let pointer = { x: -9999, y: -9999, active: false };
   let colors = { bg: "#0a0a0a", dot: "#f2f2f0", hot: "#9ec8ff" };
   let revealed = false;
   let raf = 0;
+  let resizeTimer = 0;
+
+  function isMobileLayout() {
+    return window.innerWidth < LAYOUT_BREAKPOINT;
+  }
+
+  function currentLayoutMode() {
+    return isMobileLayout() ? "mobile" : "desktop";
+  }
 
   function readColors() {
     const styles = getComputedStyle(document.documentElement);
@@ -89,31 +98,32 @@
   function buildLetterTargets() {
     const padX = Math.max(20, width * 0.04);
     const maxWidth = width - padX * 2;
-    const lines = isNarrow() ? MOBILE_LINES : [FULL_TEXT];
-    const availableH = height * (isNarrow() ? 0.36 : 0.28);
+    const mobile = isMobileLayout();
+    const lines = mobile ? MOBILE_LINES : [FULL_TEXT];
+    const availableH = height * (mobile ? 0.42 : 0.28);
 
-    let fontSize = isNarrow()
-      ? Math.min(width * 0.16, availableH / (lines.length * 1.15))
+    let fontSize = mobile
+      ? Math.min(width * 0.22, availableH / (lines.length * 1.15))
       : Math.min(width * 0.085, availableH);
 
     const probe = document.createElement("canvas").getContext("2d");
-    probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
 
-    const fit = () => {
-      const widest = Math.max(...lines.map((l) => measureLine(probe, l, fontSize)));
-      if (widest > maxWidth) {
-        fontSize *= maxWidth / widest;
-        probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
-      }
+    const widestAt = (size) => {
+      probe.font = `700 ${size}px ${WORDMARK_FONT}`;
+      return Math.max(...lines.map((l) => measureLine(probe, l, size)));
     };
-    fit();
-    // Extra safety shrink so nothing clips
+
+    let widest = widestAt(fontSize);
+    if (widest > 0) {
+      fontSize *= maxWidth / widest;
+      widest = widestAt(fontSize);
+    }
     fontSize *= 0.98;
     probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
 
     const lineHeight = fontSize * 1.15;
     const blockH = lineHeight * lines.length;
-    const startY = height * (isNarrow() ? 0.22 : 0.3) - blockH / 2 + lineHeight / 2;
+    const startY = height * (mobile ? 0.2 : 0.3) - blockH / 2 + lineHeight / 2;
 
     const letters = [];
     let maxLineW = 0;
@@ -146,8 +156,35 @@
 
     document.documentElement.style.setProperty("--title-width", `${Math.ceil(maxLineW)}px`);
     document.documentElement.style.setProperty("--title-bottom", `${Math.ceil(titleLayout.bottom)}px`);
+    document.documentElement.style.setProperty("--page-pad", `${Math.ceil(padX)}px`);
+    fitBlurbToTitle(maxLineW);
 
     return letters;
+  }
+
+  function fitBlurbToTitle(titleWidth) {
+    const blurb = content.querySelector(".blurb");
+    const desktop = content.querySelector(".blurb-desktop");
+    if (!blurb || !desktop) return;
+
+    if (isMobileLayout()) {
+      blurb.style.fontSize = "";
+      return;
+    }
+
+    const text = (desktop.textContent || "").replace(/\s+/g, " ").trim();
+    const { fontFamily, fontWeight } = getComputedStyle(blurb);
+    const probe = document.createElement("canvas").getContext("2d");
+
+    let lo = 8;
+    let hi = 64;
+    for (let i = 0; i < 20; i++) {
+      const mid = (lo + hi) / 2;
+      probe.font = `${fontWeight} ${mid}px ${fontFamily}`;
+      if (probe.measureText(text).width > titleWidth) hi = mid;
+      else lo = mid;
+    }
+    blurb.style.fontSize = `${Math.floor(lo * 100) / 100}px`;
   }
 
   function createParticles() {
@@ -174,35 +211,142 @@
     });
   }
 
-  function refreshTargets() {
-    const targets = buildLetterTargets();
-    particles.forEach((p, i) => {
-      const t = targets[i];
-      if (!t) return;
+  /** Greedy unique matching: each dot takes the nearest free letter slot. */
+  function assignNearestLetters(targets) {
+    const slots = targets.map((t) => ({ ...t, taken: false }));
+    const pairs = [];
+    for (let pi = 0; pi < particles.length; pi++) {
+      for (let ti = 0; ti < slots.length; ti++) {
+        const p = particles[pi];
+        const t = slots[ti];
+        const dx = p.x - t.tx;
+        const dy = p.y - t.ty;
+        pairs.push({ pi, ti, d: dx * dx + dy * dy });
+      }
+    }
+    pairs.sort((a, b) => a.d - b.d);
+
+    const usedP = new Set();
+    for (const { pi, ti } of pairs) {
+      if (usedP.has(pi) || slots[ti].taken) continue;
+      const p = particles[pi];
+      const t = slots[ti];
+      p.char = t.char;
       p.tx = t.tx;
       p.ty = t.ty;
       p.fontSize = t.fontSize;
-      if (phase === PHASE.SETTLE && p.formed) {
+      slots[ti].taken = true;
+      usedP.add(pi);
+      if (usedP.size === particles.length) break;
+    }
+  }
+
+  function applyTargetsInOrder(targets) {
+    particles.forEach((p, i) => {
+      const t = targets[i];
+      if (!t) return;
+      p.char = t.char;
+      p.tx = t.tx;
+      p.ty = t.ty;
+      p.fontSize = t.fontSize;
+      if (p.formed || phase === PHASE.SETTLE) {
         p.x = p.tx;
         p.y = p.ty;
         p.morph = 1;
+        p.formed = true;
       }
     });
   }
 
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    readColors();
+  function scaleScene(oldW, oldH, newW, newH) {
+    if (!oldW || !oldH) return;
+    const sx = newW / oldW;
+    const sy = newH / oldH;
+    for (const p of particles) {
+      p.x *= sx;
+      p.y *= sy;
+      p.tx *= sx;
+      p.ty *= sy;
+      if (p.ox != null) p.ox *= sx;
+      if (p.oy != null) p.oy *= sy;
+      p.fontSize *= Math.min(sx, sy);
+    }
+    titleLayout.width *= sx;
+    titleLayout.bottom *= sy;
+    titleLayout.fontSize *= Math.min(sx, sy);
+    document.documentElement.style.setProperty("--title-width", `${Math.ceil(titleLayout.width)}px`);
+    document.documentElement.style.setProperty("--title-bottom", `${Math.ceil(titleLayout.bottom)}px`);
+    document.documentElement.style.setProperty(
+      "--page-pad",
+      `${Math.ceil(Math.max(20, newW * 0.04))}px`
+    );
+    fitBlurbToTitle(titleLayout.width);
+  }
 
-    if (!particles.length) createParticles();
-    else refreshTargets();
+  function resizeCanvasOnly() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const newW = window.innerWidth;
+    const newH = window.innerHeight;
+    canvas.width = Math.floor(newW * dpr);
+    canvas.height = Math.floor(newH * dpr);
+    canvas.style.width = `${newW}px`;
+    canvas.style.height = `${newH}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { newW, newH };
+  }
+
+  function fullRelayout() {
+    const oldW = width;
+    const oldH = height;
+    const { newW, newH } = resizeCanvasOnly();
+    width = newW;
+    height = newH;
+    readColors();
+    layoutMode = currentLayoutMode();
+
+    if (!particles.length) {
+      createParticles();
+      return;
+    }
+
+    const targets = buildLetterTargets();
+    if (phase === PHASE.ROAM || phase === PHASE.SNAP) {
+      // Keep roaming positions; only refresh slot geometry for later nearest assign
+      applyTargetsInOrder(targets);
+      if (phase === PHASE.SNAP) assignNearestLetters(targets);
+    } else {
+      applyTargetsInOrder(targets);
+    }
+  }
+
+  function handleResize() {
+    const mode = currentLayoutMode();
+    const modeChanged = layoutMode != null && mode !== layoutMode;
+    const oldW = width;
+    const oldH = height;
+    const { newW, newH } = resizeCanvasOnly();
+
+    if (!particles.length) {
+      width = newW;
+      height = newH;
+      layoutMode = mode;
+      createParticles();
+      return;
+    }
+
+    if (modeChanged) {
+      width = newW;
+      height = newH;
+      layoutMode = mode;
+      const targets = buildLetterTargets();
+      applyTargetsInOrder(targets);
+      return;
+    }
+
+    // Same layout mode: scale scene smoothly — no full rebuild while dragging the window
+    width = newW;
+    height = newH;
+    scaleScene(oldW, oldH, newW, newH);
   }
 
   function revealContent() {
@@ -317,6 +461,8 @@
   function beginSnap() {
     phase = PHASE.SNAP;
     phaseStart = performance.now();
+    const targets = buildLetterTargets();
+    assignNearestLetters(targets);
     for (const p of particles) {
       if (!p.held) {
         p.ox = p.x;
@@ -354,7 +500,6 @@
     for (const p of particles) {
       if (p.held) continue;
       if (!p.formed) {
-        // Late release: rush home and form
         p.x += (p.tx - p.x) * Math.min(1, 18 * dt);
         p.y += (p.ty - p.y) * Math.min(1, 18 * dt);
         p.morph = Math.min(1, p.morph + dt * 10);
@@ -365,11 +510,8 @@
         }
         continue;
       }
-      applyPointerForce(p, dt);
-      const jx = (Math.random() - 0.5) * 0.25;
-      const jy = (Math.random() - 0.5) * 0.25;
-      p.x += (p.tx + jx - p.x) * Math.min(1, 10 * dt);
-      p.y += (p.ty + jy - p.y) * Math.min(1, 10 * dt);
+      p.x = p.tx;
+      p.y = p.ty;
       p.heat *= 0.92;
       p.morph = 1;
     }
@@ -426,7 +568,6 @@
       updateSnap(t);
       if (t >= 1) {
         phase = PHASE.SETTLE;
-        // Held letters stay as dots until released
         revealContent();
       }
     } else {
@@ -439,7 +580,7 @@
   }
 
   function runReduced() {
-    resize();
+    fullRelayout();
     phase = PHASE.SETTLE;
     for (const p of particles) {
       p.x = p.tx;
@@ -468,11 +609,12 @@
     readColors();
     try {
       await document.fonts.load(`700 64px ${WORDMARK_FONT}`);
+      await document.fonts.load('500 18px "Instrument Sans"');
       await document.fonts.ready;
     } catch (_) {
-      /* fall back to system metrics */
+      /* fall back */
     }
-    resize();
+    fullRelayout();
     startTime = performance.now();
     phaseStart = startTime;
     phase = PHASE.ROAM;
@@ -485,24 +627,15 @@
   }
 
   window.addEventListener("resize", () => {
-    cancelAnimationFrame(raf);
-    resize();
-    if (reducedMotion || phase === PHASE.SETTLE) {
-      for (const p of particles) {
-        if (p.formed || reducedMotion) {
-          p.x = p.tx;
-          p.y = p.ty;
-          p.morph = 1;
-          p.formed = true;
-        }
-      }
-      draw();
-      revealContent();
-      phase = PHASE.SETTLE;
-      raf = requestAnimationFrame(tick);
-      return;
-    }
-    raf = requestAnimationFrame(tick);
+    handleResize();
+    // After resize settles, rebuild metrics once so text stays crisp (debounced)
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (phase !== PHASE.SETTLE && phase !== PHASE.ROAM) return;
+      if (phase === PHASE.ROAM) return; // don't rebuild mid-roam
+      const targets = buildLetterTargets();
+      applyTargetsInOrder(targets);
+    }, 180);
   });
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
