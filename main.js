@@ -192,6 +192,8 @@
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
     fitBlurbToTitle(maxLineW);
     syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW);
+    // Button widths depend on --title-width; fit labels on the next frame
+    requestAnimationFrame(() => fitButtonLabels());
 
     return letters;
   }
@@ -222,28 +224,88 @@
 
   function fitBlurbToTitle(titleWidth) {
     const blurb = content.querySelector(".blurb");
-    const desktop = content.querySelector(".blurb-desktop");
-    if (!blurb || !desktop) return;
+    if (!blurb) return;
 
-    if (isMobileLayout()) {
-      blurb.style.fontSize = "";
+    const { fontFamily, fontWeight } = getComputedStyle(blurb);
+    const probe = document.createElement("canvas").getContext("2d");
+    const mobile = isMobileLayout();
+
+    let lines;
+    if (mobile) {
+      const el = content.querySelector(".blurb-mobile");
+      if (!el) return;
+      lines = el.innerHTML
+        .split(/<br\s*\/?>/i)
+        .map((s) =>
+          s
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/\s+/g, " ")
+            .trim()
+        )
+        .filter(Boolean);
+    } else {
+      const el = content.querySelector(".blurb-desktop");
+      if (!el) return;
+      lines = [(el.textContent || "").replace(/\s+/g, " ").trim()];
+    }
+
+    if (!lines.length) return;
+
+    const fits = (size) => {
+      probe.font = `${fontWeight} ${size}px ${fontFamily}`;
+      return lines.every((line) => probe.measureText(line).width <= titleWidth);
+    };
+
+    let lo = 8;
+    let hi = mobile ? 42 : 64;
+    for (let i = 0; i < 18; i++) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
+    }
+    blurb.style.fontSize = `${lo.toFixed(2)}px`;
+  }
+
+  function fitButtonLabels() {
+    const buttons = [...content.querySelectorAll(".btn-row .btn")];
+    if (!buttons.length) return;
+
+    if (!isMobileLayout()) {
+      buttons.forEach((b) => {
+        b.style.fontSize = "";
+      });
       return;
     }
 
-    const text = (desktop.textContent || "").replace(/\s+/g, " ").trim();
-    const { fontFamily, fontWeight } = getComputedStyle(blurb);
+    const minWidth = Math.min(...buttons.map((b) => b.getBoundingClientRect().width));
+    const cs = getComputedStyle(buttons[0]);
+    const padX =
+      (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const avail = Math.max(32, minWidth - padX - 6);
+    const btnH = buttons[0].getBoundingClientRect().height || 56;
+    const labels = buttons.map((b) => (b.textContent || "").replace(/\s+/g, " ").trim());
+    const fontFamily = cs.fontFamily;
+    const fontWeight = cs.fontWeight;
     const probe = document.createElement("canvas").getContext("2d");
 
-    let lo = 8;
-    let hi = 64;
+    const fits = (size) => {
+      probe.font = `${fontWeight} ${size}px ${fontFamily}`;
+      return labels.every((label) => probe.measureText(label).width <= avail);
+    };
+
+    let lo = 10;
+    let hi = Math.min(btnH * 0.42, 34);
     for (let i = 0; i < 18; i++) {
       const mid = (lo + hi) / 2;
-      probe.font = `${fontWeight} ${mid}px ${fontFamily}`;
-      if (probe.measureText(text).width > titleWidth) hi = mid;
-      else lo = mid;
+      if (fits(mid)) lo = mid;
+      else hi = mid;
     }
-    // Sub-pixel size avoids visible jumps while dragging the window
-    blurb.style.fontSize = `${lo.toFixed(2)}px`;
+
+    const size = `${lo.toFixed(2)}px`;
+    buttons.forEach((b) => {
+      b.style.fontSize = size;
+    });
   }
 
   function createParticles() {
