@@ -189,11 +189,11 @@
     return octx.measureText(text).width;
   }
 
-  /** Radius of the tittle on lowercase “i” at the wordmark size (scales with content). */
-  const iDotRadiusCache = new Map();
-  function iDotRadius(fontSize) {
+  /** Tittle (dot) metrics for lowercase “i” at the wordmark size. */
+  const iTittleCache = new Map();
+  function iTittleMetrics(fontSize) {
     const key = Math.round(fontSize * 4) / 4;
-    const cached = iDotRadiusCache.get(key);
+    const cached = iTittleCache.get(key);
     if (cached != null) return cached;
 
     const pad = Math.ceil(key * 1.4);
@@ -202,9 +202,13 @@
     c.width = size;
     c.height = size;
     const octx = c.getContext("2d", { willReadFrequently: true });
+    const fallback = {
+      radius: Math.max(2, key * 0.07),
+      offsetX: 0,
+      offsetY: -key * 0.32,
+    };
     if (!octx) {
-      const fallback = Math.max(2, key * 0.07);
-      iDotRadiusCache.set(key, fallback);
+      iTittleCache.set(key, fallback);
       return fallback;
     }
 
@@ -242,11 +246,37 @@
       }
     }
 
-    const r = found
-      ? Math.max(2, (Math.max(maxX - minX, maxY - minY) + 1) / 2)
-      : Math.max(2, key * 0.07);
-    iDotRadiusCache.set(key, r);
-    return r;
+    const result = found
+      ? {
+          radius: Math.max(2, (Math.max(maxX - minX, maxY - minY) + 1) / 2),
+          offsetX: (minX + maxX) / 2 - cx,
+          offsetY: (minY + maxY) / 2 - cy,
+        }
+      : fallback;
+    iTittleCache.set(key, result);
+    return result;
+  }
+
+  function iDotRadius(fontSize) {
+    return iTittleMetrics(fontSize).radius;
+  }
+
+  /** One target per glyph; lowercase “i” becomes body (ı) + separate tittle. */
+  function pushGlyphTargets(letters, char, tx, ty, fontSize) {
+    if (char === "i") {
+      const { radius, offsetX, offsetY } = iTittleMetrics(fontSize);
+      letters.push({ char: "ı", tx, ty, fontSize, tittle: false });
+      letters.push({
+        char: "i",
+        tx: tx + offsetX,
+        ty: ty + offsetY,
+        fontSize,
+        tittle: true,
+        tittleR: radius,
+      });
+      return;
+    }
+    letters.push({ char, tx, ty, fontSize, tittle: false });
   }
 
   function widestLineWidth(probe, lines, size) {
@@ -293,12 +323,7 @@
         if (char === " ") continue;
         const before = measureLine(probe, line.slice(0, i), fontSize);
         const after = measureLine(probe, line.slice(0, i + 1), fontSize);
-        letters.push({
-          char,
-          tx: lineStart + (before + after) / 2,
-          ty: y,
-          fontSize,
-        });
+        pushGlyphTargets(letters, char, lineStart + (before + after) / 2, y, fontSize);
       }
     });
 
@@ -401,12 +426,7 @@
         if (char === " ") continue;
         const before = measureLine(probe, line.slice(0, i), fontSize);
         const after = measureLine(probe, line.slice(0, i + 1), fontSize);
-        letters.push({
-          char,
-          tx: lineStart + (before + after) / 2,
-          ty: y,
-          fontSize,
-        });
+        pushGlyphTargets(letters, char, lineStart + (before + after) / 2, y, fontSize);
       }
     });
 
@@ -574,6 +594,7 @@
       const speed = 14 + Math.random() * 22;
       return {
         char: t.char,
+        tittle: !!t.tittle,
         tx: t.tx,
         ty: t.ty,
         fontSize: t.fontSize,
@@ -613,6 +634,7 @@
       const p = particles[pi];
       const t = slots[ti];
       p.char = t.char;
+      p.tittle = !!t.tittle;
       p.tx = t.tx;
       p.ty = t.ty;
       p.fontSize = t.fontSize;
@@ -623,10 +645,23 @@
   }
 
   function applyTargetsInOrder(targets) {
+    if (targets.length !== particles.length) {
+      createParticles();
+      if (phase === PHASE.SETTLE || revealed) {
+        for (const p of particles) {
+          p.x = p.tx;
+          p.y = p.ty;
+          p.morph = 1;
+          p.formed = true;
+        }
+      }
+      return;
+    }
     particles.forEach((p, i) => {
       const t = targets[i];
       if (!t) return;
       p.char = t.char;
+      p.tittle = !!t.tittle;
       p.tx = t.tx;
       p.ty = t.ty;
       p.fontSize = t.fontSize;
@@ -1021,6 +1056,16 @@
     ctx.globalAlpha = 1;
 
     const tittleR = iDotRadius(p.fontSize);
+
+    // Tittle particles are always circles (the dot of the i).
+    if (p.tittle) {
+      const r = p.held ? Math.max(tittleR, p.fontSize * 0.18) : tittleR;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+
     const asDot = p.morph <= 0.02 || p.held;
     if (asDot) {
       const r = p.held ? Math.max(tittleR, p.fontSize * 0.18) : tittleR;
