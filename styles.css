@@ -112,6 +112,8 @@ body {
   font-size: clamp(0.95rem, 3.2vw, 1.25rem);
   line-height: 1.4;
   color: var(--fg-muted);
+  text-align: justify;
+  text-align-last: center;
 }
 
 .blurb-desktop {
@@ -125,7 +127,7 @@ body {
 .actions {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   gap: var(--btn-gap);
   margin-bottom: 1rem;
@@ -136,8 +138,8 @@ body {
 .icon-row {
   display: flex;
   flex-wrap: nowrap;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   gap: var(--btn-gap);
   width: 100%;
 }
@@ -157,8 +159,8 @@ body {
   box-sizing: border-box;
   height: var(--btn-h);
   min-height: var(--btn-h);
-  flex: 1 1 auto;
-  max-width: 14rem;
+  flex: 1 1 0;
+  min-width: 0;
   padding: 0 var(--btn-pad-x);
   border: 1px solid var(--btn-border);
   border-radius: 0.35rem;
@@ -188,9 +190,10 @@ body {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: var(--btn-h);
+  width: auto;
   height: var(--btn-h);
-  flex: 0 0 var(--btn-h);
+  flex: 1 1 0;
+  min-width: 0;
   border: 1px solid var(--btn-border);
   border-radius: 0.35rem;
   color: var(--fg);
@@ -243,6 +246,8 @@ body {
 
   .blurb {
     font-size: clamp(0.7rem, 1.35vw, 1.2rem);
+    text-align: center;
+    text-align-last: center;
   }
 
   .blurb-desktop {
@@ -257,6 +262,7 @@ body {
   .actions {
     flex-direction: row;
     flex-wrap: nowrap;
+    align-items: center;
     width: auto;
     max-width: 100%;
   }
@@ -274,6 +280,11 @@ body {
   .icon-row {
     width: auto;
     flex: 0 0 auto;
+  }
+
+  .icon-btn {
+    flex: 0 0 var(--btn-h);
+    width: var(--btn-h);
   }
 
   .company-number {
