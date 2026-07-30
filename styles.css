@@ -22,7 +22,8 @@
   --btn-hover-bg: rgba(242, 242, 240, 0.08);
   --focus: #9ec8ff;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --title-width: calc(100vw - (var(--page-pad) * 2));
+  --title-max: 68rem;
+  --title-width: min(calc(100vw - (var(--page-pad) * 2)), var(--title-max));
   --title-bottom: 38vh;
   --page-pad: max(20px, 4vw);
   --btn-h: 3.5rem;

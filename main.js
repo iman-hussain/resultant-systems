@@ -10,6 +10,7 @@
   const FULL_TEXT = "Resultant Systems Limited";
   const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
   const LAYOUT_BREAKPOINT = 721;
+  const DESKTOP_MAX_SPAN = 1100;
   const ROAM_MS = 900;
   const SNAP_MS = 100;
   const GRAB_RADIUS = 48;
@@ -100,14 +101,15 @@
 
   function buildLetterTargets() {
     const padX = Math.max(20, width * 0.04);
-    const maxWidth = width - padX * 2;
+    const band = width - padX * 2;
+    const maxWidth = isMobileLayout() ? band : Math.min(band, DESKTOP_MAX_SPAN);
     const mobile = isMobileLayout();
     const lines = mobile ? MOBILE_LINES : [FULL_TEXT];
     const availableH = height * (mobile ? 0.32 : 0.28);
 
     let fontSize = mobile
       ? Math.min(width * 0.2, availableH / (lines.length * 1.15))
-      : Math.min(width * 0.085, availableH);
+      : Math.min(maxWidth * 0.085, availableH);
 
     const probe = document.createElement("canvas").getContext("2d");
 
