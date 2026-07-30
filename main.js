@@ -98,6 +98,54 @@
     };
   }
 
+  const THEME_CYCLE = ["auto", "dark", "sepia", "light"];
+  const THEME_LABELS = { auto: "Auto", dark: "Dark", sepia: "Sepia", light: "Light" };
+  const themeToggle = document.getElementById("theme-toggle");
+  const themeColorMeta = document.getElementById("theme-color-dynamic");
+
+  function normalizeTheme(value) {
+    return THEME_CYCLE.includes(value) ? value : "auto";
+  }
+
+  function currentTheme() {
+    return normalizeTheme(document.documentElement.dataset.theme);
+  }
+
+  function updateThemeChrome(mode) {
+    if (themeToggle) {
+      const label = THEME_LABELS[mode];
+      const valueEl = themeToggle.querySelector(".theme-toggle-value");
+      if (valueEl) valueEl.textContent = label;
+      themeToggle.setAttribute(
+        "aria-label",
+        `Colour theme: ${label}. Click to cycle Auto, Dark, Sepia, Light.`
+      );
+    }
+    if (themeColorMeta) {
+      readColors();
+      themeColorMeta.setAttribute("content", colors.bg);
+    }
+  }
+
+  function applyTheme(mode, { persist = true } = {}) {
+    const next = normalizeTheme(mode);
+    document.documentElement.dataset.theme = next;
+    if (persist) {
+      try {
+        localStorage.setItem("theme", next);
+      } catch (_) {
+        /* private mode */
+      }
+    }
+    updateThemeChrome(next);
+    readColors();
+  }
+
+  function cycleTheme() {
+    const idx = THEME_CYCLE.indexOf(currentTheme());
+    applyTheme(THEME_CYCLE[(idx + 1) % THEME_CYCLE.length]);
+  }
+
   /** Soft start, decisive settle — reads better on a longer snap. */
   function easeInOutCubic(t) {
     const x = Math.min(1, Math.max(0, t));
@@ -141,6 +189,66 @@
     return octx.measureText(text).width;
   }
 
+  /** Radius of the tittle on lowercase “i” at the wordmark size (scales with content). */
+  const iDotRadiusCache = new Map();
+  function iDotRadius(fontSize) {
+    const key = Math.round(fontSize * 4) / 4;
+    const cached = iDotRadiusCache.get(key);
+    if (cached != null) return cached;
+
+    const pad = Math.ceil(key * 1.4);
+    const size = Math.max(8, pad * 2);
+    const c = document.createElement("canvas");
+    c.width = size;
+    c.height = size;
+    const octx = c.getContext("2d", { willReadFrequently: true });
+    if (!octx) {
+      const fallback = Math.max(2, key * 0.07);
+      iDotRadiusCache.set(key, fallback);
+      return fallback;
+    }
+
+    const cx = size / 2;
+    const cy = size / 2;
+    octx.font = `700 ${key}px ${WORDMARK_FONT}`;
+    octx.textAlign = "center";
+    octx.textBaseline = "middle";
+
+    octx.clearRect(0, 0, size, size);
+    octx.fillStyle = "#fff";
+    octx.fillText("i", cx, cy);
+    const withDot = octx.getImageData(0, 0, size, size).data;
+
+    octx.clearRect(0, 0, size, size);
+    octx.fillText("ı", cx, cy);
+    const withoutDot = octx.getImageData(0, 0, size, size).data;
+
+    let minX = size;
+    let minY = size;
+    let maxX = 0;
+    let maxY = 0;
+    let found = false;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        // Ink present on “i” but not on dotless “ı” → tittle
+        if (withDot[i] > 40 && withoutDot[i] < 40) {
+          found = true;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    const r = found
+      ? Math.max(2, (Math.max(maxX - minX, maxY - minY) + 1) / 2)
+      : Math.max(2, key * 0.07);
+    iDotRadiusCache.set(key, r);
+    return r;
+  }
+
   function widestLineWidth(probe, lines, size) {
     probe.font = `700 ${size}px ${WORDMARK_FONT}`;
     return Math.max(...lines.map((l) => measureLine(probe, l, size)));
@@ -178,7 +286,7 @@
     lines.forEach((line, lineIndex) => {
       const lineW = measureLine(probe, line, fontSize);
       maxLineW = Math.max(maxLineW, lineW);
-      const lineStart = leftColStart + (leftColW - lineW) / 2;
+      const lineStart = leftColStart + leftColW - lineW;
       const y = startY + lineIndex * lineHeight;
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
@@ -357,6 +465,8 @@
     wordmarkSelect.hidden = !active;
     wordmarkSelect.classList.toggle("is-active", active);
     wordmarkSelect.setAttribute("aria-hidden", active ? "false" : "true");
+    const pageTitle = document.getElementById("page-title");
+    if (pageTitle) pageTitle.hidden = !!active;
   }
 
   function updateWordmarkDraggingState() {
@@ -386,14 +496,14 @@
 
     if (short) {
       // Landscape right column: wrap naturally; size for readability in the column
-      blurbPx = Math.min(Math.max(titleFont * 0.22, 13), 18);
+      blurbPx = Math.min(Math.max(titleFont * 0.28, 14), 21);
       if (blurb) blurb.style.fontSize = `${blurbPx.toFixed(2)}px`;
-      const btnH = Math.min(Math.max(titleFont * 0.42, 32), 44);
+      const btnH = Math.min(Math.max(titleFont * 0.58, 36), 52);
       root.setProperty("--btn-font", `${Math.min(btnPx, 15).toFixed(2)}px`);
       root.setProperty("--btn-h", `${btnH.toFixed(2)}px`);
       root.setProperty("--btn-pad-x", `${(btnH * 0.35).toFixed(2)}px`);
       root.setProperty("--btn-gap", `${Math.max(8, titleFont * 0.12).toFixed(2)}px`);
-      root.setProperty("--company-font", `${Math.min(titleFont * 0.18, 12).toFixed(2)}px`);
+      root.setProperty("--company-font", `${Math.min(titleFont * 0.12, 9).toFixed(2)}px`);
       return;
     }
 
@@ -910,9 +1020,10 @@
     ctx.fillStyle = fill;
     ctx.globalAlpha = 1;
 
+    const tittleR = iDotRadius(p.fontSize);
     const asDot = p.morph <= 0.02 || p.held;
     if (asDot) {
-      const r = p.held ? Math.max(6, p.fontSize * 0.18) : 4.2;
+      const r = p.held ? Math.max(tittleR, p.fontSize * 0.18) : tittleR;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -929,7 +1040,7 @@
     if (p.morph < 0.85) {
       ctx.globalAlpha = 1 - p.morph;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 4.2 * (1 - p.morph), 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, tittleR * (1 - p.morph), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -1042,8 +1153,23 @@
     window.visualViewport.addEventListener("resize", markPendingLayout);
   }
 
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
-  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", readColors);
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (currentTheme() === "auto") {
+      updateThemeChrome("auto");
+      readColors();
+    }
+  });
+  window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+    if (currentTheme() === "auto") {
+      updateThemeChrome("auto");
+      readColors();
+    }
+  });
+
+  if (themeToggle) {
+    themeToggle.addEventListener("click", cycleTheme);
+  }
+  applyTheme(currentTheme(), { persist: false });
 
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointermove", onPointerMove);

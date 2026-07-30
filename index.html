@@ -1,8 +1,18 @@
 <!DOCTYPE html>
-<html lang="en-GB">
+<html lang="en-GB" data-theme="auto">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          if (t === "dark" || t === "sepia" || t === "light" || t === "auto") {
+            document.documentElement.dataset.theme = t;
+          }
+        } catch (_) {}
+      })();
+    </script>
     <title>
       Resultant Systems Limited
       AI, Data &amp; Tech Solutions
@@ -32,6 +42,12 @@
     <meta property="og:url" content="https://resultantsystems.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="en_GB" />
+    <meta property="og:image" content="https://resultantsystems.com/og-image.png" />
+    <meta property="og:image:secure_url" content="https://resultantsystems.com/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="1200" />
+    <meta property="og:image:alt" content="Resultant Systems Limited" />
 
     <meta name="twitter:card" content="summary" />
     <meta
@@ -42,16 +58,29 @@
       name="twitter:description"
       content="UK Ltd founded by Iman Hussain delivering AI, data &amp; tech solutions worldwide. Company number 17364920."
     />
+    <meta name="twitter:image" content="https://resultantsystems.com/og-image.png" />
+    <meta name="twitter:image:alt" content="Resultant Systems Limited" />
+
+    <meta name="image" content="https://resultantsystems.com/og-image.png" />
+    <meta itemprop="image" content="https://resultantsystems.com/og-image.png" />
 
     <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)" />
+    <meta id="theme-color-dynamic" name="theme-color" content="#0a0a0a" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;700&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      href="fonts/google-sans-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="fonts/instrument-sans-latin-500-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
     <link rel="stylesheet" href="styles.css" />
 
@@ -68,6 +97,8 @@
             "email": "contact@imanhussain.com",
             "telephone": "+447402626879",
             "foundingDate": "2025",
+            "logo": "https://resultantsystems.com/og-image.png",
+            "image": "https://resultantsystems.com/og-image.png",
             "identifier": {
               "@type": "PropertyValue",
               "name": "Company Number",
@@ -127,6 +158,10 @@
             "isPartOf": { "@id": "https://resultantsystems.com/#website" },
             "about": { "@id": "https://resultantsystems.com/#organization" },
             "description": "Resultant Systems Limited delivers AI, data & tech solutions worldwide. UK private limited company founded by Iman Hussain.",
+            "primaryImageOfPage": {
+              "@type": "ImageObject",
+              "url": "https://resultantsystems.com/og-image.png"
+            },
             "inLanguage": "en-GB"
           },
           {
@@ -134,7 +169,7 @@
             "@id": "https://resultantsystems.com/#service",
             "name": "Resultant Systems Limited",
             "url": "https://resultantsystems.com/",
-            "image": "https://resultantsystems.com/",
+            "image": "https://resultantsystems.com/og-image.png",
             "provider": { "@id": "https://resultantsystems.com/#organization" },
             "serviceType": [
               "AI solutions",
@@ -201,6 +236,8 @@
   <body>
     <canvas id="field" aria-hidden="true"></canvas>
 
+    <h1 class="sr-only" id="page-title">Resultant Systems Limited</h1>
+
     <div id="wordmark-select" class="wordmark-select" aria-hidden="true" hidden>
       <h1 class="wordmark-select-text">Resultant Systems Limited</h1>
     </div>
@@ -221,8 +258,6 @@
     </nav>
 
     <main class="stage">
-      <h1 class="sr-only">Resultant Systems Limited</h1>
-
       <div class="content" id="content" data-revealed="false">
         <p class="blurb">
           <span class="blurb-desktop"
@@ -303,7 +338,12 @@
         </div>
       </div>
 
-      <p class="company-number" id="company-number">Company Number: 17364920</p>
+      <div class="site-footer" id="site-footer">
+        <p class="company-number" id="company-number">Company Number: 17364920</p>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-live="polite">
+          Theme: <span class="theme-toggle-value">Auto</span>
+        </button>
+      </div>
     </main>
 
     <script src="main.js" defer></script>

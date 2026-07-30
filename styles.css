@@ -1,16 +1,48 @@
-/* Google Sans (wordmark) via Fontsource CDN */
+/* Google Sans (wordmark) — self-hosted */
 @font-face {
   font-family: "Google Sans";
   font-style: normal;
   font-display: swap;
   font-weight: 400 700;
-  src: url("https://cdn.jsdelivr.net/fontsource/fonts/google-sans:vf@5.3.0/latin-wght-normal.woff2")
-    format("woff2-variations");
+  src: url("fonts/google-sans-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Instrument Sans (UI) — self-hosted */
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("fonts/instrument-sans-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("fonts/instrument-sans-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("fonts/instrument-sans-latin-700-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
     U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 :root {
+  /* Keep color-scheme stable across themes — flipping to `dark` alone
+     changes scrollbar metrics and shrinks vw-based button chrome. */
   color-scheme: dark light;
   --bg: #0a0a0a;
   --fg: #f2f2f0;
@@ -35,7 +67,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  html[data-theme="auto"] {
     --bg: #f4f4f2;
     --fg: #111111;
     --fg-muted: rgba(17, 17, 17, 0.75);
@@ -45,6 +77,39 @@
     --btn-hover-bg: rgba(17, 17, 17, 0.06);
     --focus: #1a4a8a;
   }
+}
+
+html[data-theme="dark"] {
+  --bg: #0a0a0a;
+  --fg: #f2f2f0;
+  --fg-muted: rgba(242, 242, 240, 0.78);
+  --dot: #f2f2f0;
+  --dot-hot: #9ec8ff;
+  --btn-border: rgba(242, 242, 240, 0.35);
+  --btn-hover-bg: rgba(242, 242, 240, 0.08);
+  --focus: #9ec8ff;
+}
+
+html[data-theme="light"] {
+  --bg: #f4f4f2;
+  --fg: #111111;
+  --fg-muted: rgba(17, 17, 17, 0.75);
+  --dot: #111111;
+  --dot-hot: #1a4a8a;
+  --btn-border: rgba(17, 17, 17, 0.3);
+  --btn-hover-bg: rgba(17, 17, 17, 0.06);
+  --focus: #1a4a8a;
+}
+
+html[data-theme="sepia"] {
+  --bg: #f4ecd8;
+  --fg: #5c4033;
+  --fg-muted: rgba(92, 64, 51, 0.75);
+  --dot: #5c4033;
+  --dot-hot: #a67c52;
+  --btn-border: rgba(92, 64, 51, 0.35);
+  --btn-hover-bg: rgba(92, 64, 51, 0.08);
+  --focus: #8b6914;
 }
 
 *,
@@ -66,6 +131,29 @@ body {
   font-family: "Instrument Sans", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Paper grain sits above the canvas (same z) but below UI */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s var(--ease);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  mix-blend-mode: multiply;
+}
+
+html[data-theme="sepia"] body::after {
+  opacity: 0.42;
 }
 
 #field {
@@ -202,7 +290,13 @@ body {
   width: 100%;
 }
 
-.company-number {
+.site-footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.65em 1.1em;
   margin: auto 0 0;
   width: var(--title-width);
   max-width: 100%;
@@ -215,14 +309,54 @@ body {
   transform: translateY(0.4rem);
   transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
   pointer-events: auto;
+  z-index: 1;
+}
+
+.content[data-revealed="true"] ~ .site-footer {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.company-number {
+  margin: 0;
+  font-size: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  white-space: nowrap;
+  text-align: center;
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
 }
 
-.content[data-revealed="true"] ~ .company-number {
-  opacity: 1;
-  transform: translateY(0);
+.theme-toggle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.theme-toggle-value {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: from-font;
+}
+
+.theme-toggle:hover .theme-toggle-value {
+  text-decoration-thickness: 2px;
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .btn {
@@ -393,7 +527,7 @@ body {
     max-height: 1.5rem;
   }
 
-  .company-number {
+  .site-footer {
     margin-top: auto;
     margin-bottom: 0;
     padding-top: 1rem;
@@ -403,7 +537,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .content,
-  .company-number {
+  .site-footer {
     transition: none;
   }
 }
@@ -467,7 +601,7 @@ html.is-short-viewport .icon-btn svg {
   max-height: 1.25rem;
 }
 
-html.is-short-viewport .company-number {
+html.is-short-viewport .site-footer {
   position: fixed;
   left: var(--content-left);
   bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
@@ -475,7 +609,7 @@ html.is-short-viewport .company-number {
   max-width: none;
   margin: 0;
   padding: 0;
-  text-align: left;
+  justify-content: center;
   white-space: nowrap;
   z-index: 1;
 }
@@ -487,5 +621,5 @@ html.is-short-viewport .wordmark-select {
 }
 
 html.is-short-viewport .wordmark-select-text {
-  text-align: center;
+  text-align: right;
 }

@@ -6,6 +6,10 @@ One-page landing site for [Resultant Systems Limited](https://www.resultantsyste
 
 Static HTML / CSS / JS. No build step. Hosted on GitHub Pages.
 
+Fonts are self-hosted under `fonts/` (Instrument Sans + Google Sans). Social preview image: `og-image.png`.
+
+Custom response headers (CSP, COOP, etc.) are not configurable on GitHub Pages alone; put Cloudflare (or similar) in front if you need them.
+
 ## Local preview
 
 Open `index.html` in a browser, or serve the folder:
