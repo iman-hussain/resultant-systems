@@ -47,6 +47,7 @@
   let colors = { bg: "#0a0a0a", dot: "#f2f2f0", hot: "#9ec8ff" };
   let revealed = false;
   let raf = 0;
+  let pendingLayout = false;
   const wordmarkSelect = document.getElementById("wordmark-select");
   const wordmarkSelectText = wordmarkSelect?.querySelector(".wordmark-select-text");
   const DRAG_THRESHOLD = 8;
@@ -352,14 +353,24 @@
   }
 
   function resizeCanvasOnly() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
     const newW = window.innerWidth;
     const newH = window.innerHeight;
-    canvas.width = Math.floor(newW * dpr);
-    canvas.height = Math.floor(newH * dpr);
+    const bufW = Math.floor(newW * nextDpr);
+    const bufH = Math.floor(newH * nextDpr);
+    const sizeChanged = canvas.width !== bufW || canvas.height !== bufH;
+
+    if (sizeChanged) {
+      canvas.width = bufW;
+      canvas.height = bufH;
+      ctx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
+    } else if (nextDpr !== dpr) {
+      ctx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
+    }
+
+    dpr = nextDpr;
     canvas.style.width = `${newW}px`;
     canvas.style.height = `${newH}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { newW, newH };
   }
 
@@ -384,7 +395,19 @@
     }
   }
 
-  function handleResize() {
+  function ensureLayout() {
+    const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+    const newW = window.innerWidth;
+    const newH = window.innerHeight;
+    if (
+      !pendingLayout &&
+      newW === width &&
+      newH === height &&
+      nextDpr === dpr
+    ) {
+      return;
+    }
+    pendingLayout = false;
     fullRelayout();
   }
 
@@ -705,6 +728,7 @@
   }
 
   function tick(now) {
+    ensureLayout();
     const dt = Math.min(0.033, (now - (tick.prev || now)) / 1000) || 0.016;
     tick.prev = now;
 
@@ -742,6 +766,7 @@
     revealContent();
 
     function quietLoop(now) {
+      ensureLayout();
       const dt = Math.min(0.033, (now - (quietLoop.prev || now)) / 1000) || 0.016;
       quietLoop.prev = now;
       updateSettle(dt);
@@ -772,14 +797,11 @@
     raf = requestAnimationFrame(tick);
   }
 
-  let resizeRaf = 0;
-  window.addEventListener("resize", () => {
-    if (resizeRaf) return;
-    resizeRaf = requestAnimationFrame(() => {
-      resizeRaf = 0;
-      handleResize();
-    });
-  });
+  const markPendingLayout = () => {
+    pendingLayout = true;
+  };
+  window.addEventListener("resize", markPendingLayout);
+  window.addEventListener("orientationchange", markPendingLayout);
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", readColors);
