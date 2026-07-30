@@ -11,6 +11,7 @@
   const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
   const LAYOUT_BREAKPOINT = 900;
   const DESKTOP_MAX_SPAN = 1800;
+  const STACK_GAP_PX = 22;
   const ROAM_MS = 900;
   const SNAP_MS = 100;
   const GRAB_RADIUS = 48;
@@ -135,15 +136,19 @@
       const halfH = height * 0.5;
       const centerY = halfH * 0.5;
       startY = centerY - blockH / 2 + lineHeight / 2;
-      const titleBottom = startY + (lines.length - 1) * lineHeight + fontSize * 0.55;
+      let titleBottom = startY + (lines.length - 1) * lineHeight + fontSize * 0.5;
       const maxBottom = halfH - 10;
       if (titleBottom > maxBottom) {
         startY -= titleBottom - maxBottom;
+        titleBottom = startY + (lines.length - 1) * lineHeight + fontSize * 0.5;
       }
       startY = Math.max(lineHeight * 0.55, startY);
     } else {
       startY = height * 0.3 - blockH / 2 + lineHeight / 2;
     }
+
+    // Middle baseline: glyph extends ±fontSize/2 from each line centre
+    const glyphBottom = startY + (lines.length - 1) * lineHeight + fontSize * 0.5;
 
     const letters = [];
     let maxLineW = 0;
@@ -171,13 +176,18 @@
     titleLayout = {
       fontSize,
       width: maxLineW,
-      top: startY - fontSize * 0.55,
-      bottom: startY + (lines.length - 1) * lineHeight + fontSize * 0.55,
+      top: startY - fontSize * 0.5,
+      bottom: glyphBottom,
     };
 
     // Content/blurb match the actual rendered title width (not the full pad band)
     document.documentElement.style.setProperty("--title-width", `${Math.round(maxLineW)}px`);
-    document.documentElement.style.setProperty("--title-bottom", `${Math.round(titleLayout.bottom)}px`);
+    document.documentElement.style.setProperty("--title-bottom", `${Math.round(glyphBottom)}px`);
+    document.documentElement.style.setProperty("--stack-gap", `${STACK_GAP_PX}px`);
+    document.documentElement.style.setProperty(
+      "--content-top",
+      `${Math.round(glyphBottom + STACK_GAP_PX)}px`
+    );
     document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
     fitBlurbToTitle(maxLineW);

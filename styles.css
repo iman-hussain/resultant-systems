@@ -30,7 +30,8 @@
   --btn-gap: 0.65rem;
   --btn-font: clamp(0.95rem, 3.6vw, 1.1rem);
   --btn-pad-x: clamp(0.75rem, 3vw, 1.25rem);
-  --icon-svg: 1.85rem;
+  --stack-gap: 22px;
+  --content-top: 50vh;
 }
 
 @media (prefers-color-scheme: light) {
@@ -107,7 +108,7 @@ body {
 
 .wordmark-select-text {
   margin: 0;
-  padding: 0.15em 0;
+  padding: 0;
   font-family: "Google Sans", "Google Sans Variable", "Segoe UI", sans-serif;
   font-weight: 700;
   font-size: var(--wordmark-size, 3rem);
@@ -149,8 +150,8 @@ body {
   transform: translateY(0.6rem);
   transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
   pointer-events: none;
-  /* Below the top-half wordmark */
-  margin-top: 50vh;
+  /* Same gap below title as between description and buttons */
+  margin-top: var(--content-top);
   margin-bottom: 0.85rem;
   flex-shrink: 0;
 }
@@ -162,7 +163,7 @@ body {
 }
 
 .blurb {
-  margin: 0 auto 1.1rem;
+  margin: 0 auto var(--stack-gap);
   width: 100%;
   font-size: clamp(0.95rem, 3.2vw, 1.25rem);
   line-height: 1.4;
@@ -270,8 +271,10 @@ body {
 }
 
 .icon-btn svg {
-  width: var(--icon-svg);
-  height: var(--icon-svg);
+  width: 52%;
+  height: 52%;
+  max-width: 2.75rem;
+  max-height: 2.75rem;
 }
 
 .icon-btn:hover {
@@ -308,14 +311,12 @@ body {
     --btn-gap: clamp(0.55rem, 1.1vw, 1rem);
     --btn-font: clamp(0.9rem, 1.35vw, 1.25rem);
     --btn-pad-x: clamp(1rem, 1.8vw, 1.75rem);
-    --icon-svg: clamp(18px, 1.6vw, 24px);
-    --stack-gap: 1.35rem;
+    --stack-gap: 22px;
   }
 
   .stage {
     justify-content: flex-start;
-    padding: calc(var(--title-bottom) + var(--stack-gap)) 0
-      max(1rem, env(safe-area-inset-bottom, 0px));
+    padding: var(--content-top) 0 max(1rem, env(safe-area-inset-bottom, 0px));
   }
 
   .content {
@@ -369,6 +370,13 @@ body {
     min-height: var(--btn-h);
     aspect-ratio: auto;
     border-radius: 0.35rem;
+  }
+
+  .icon-btn svg {
+    width: 48%;
+    height: 48%;
+    max-width: 1.5rem;
+    max-height: 1.5rem;
   }
 
   .company-number {
