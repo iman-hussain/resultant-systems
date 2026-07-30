@@ -298,7 +298,7 @@ body {
   border: 0;
 }
 
-/* Desktop: one line name (canvas), one line blurb, one line buttons, one line company */
+/* Desktop: one line name (canvas), one line blurb, one line buttons; company number at foot */
 @media (min-width: 900px) {
   :root {
     --btn-h: clamp(2.6rem, 3.8vw, 3.75rem);
@@ -306,30 +306,23 @@ body {
     --btn-font: clamp(0.9rem, 1.35vw, 1.25rem);
     --btn-pad-x: clamp(1rem, 1.8vw, 1.75rem);
     --icon-svg: clamp(18px, 1.6vw, 24px);
+    --stack-gap: 1.35rem;
   }
 
   .stage {
     justify-content: flex-start;
-    padding: calc(var(--title-bottom) + clamp(0.75rem, 2.5vh, 1.75rem)) 0
-      clamp(1rem, 3vh, 2rem);
+    padding: calc(var(--title-bottom) + var(--stack-gap)) 0
+      max(1rem, env(safe-area-inset-bottom, 0px));
   }
 
   .content {
     margin-bottom: 0;
   }
 
-  .company-number {
-    margin-top: 1rem;
-    opacity: 0;
-  }
-
-  .content[data-revealed="true"] ~ .company-number {
-    opacity: 1;
-  }
-
   .blurb {
     font-size: clamp(0.7rem, 1.35vw, 1.2rem);
     text-align: center;
+    margin-bottom: var(--stack-gap);
   }
 
   .blurb-desktop {
@@ -375,6 +368,9 @@ body {
   }
 
   .company-number {
+    margin-top: auto;
+    margin-bottom: 0;
+    padding-top: 1rem;
     font-size: clamp(0.9rem, 1.2vw, 1.1rem);
   }
 }
