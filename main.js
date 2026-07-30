@@ -155,18 +155,18 @@
 
     titleLayout = {
       fontSize,
-      width: maxWidth,
+      width: maxLineW,
       top: startY - fontSize * 0.55,
       bottom: startY + (lines.length - 1) * lineHeight + fontSize * 0.55,
     };
 
-    // Content width tracks the pad band (not measured glyph width) so resize stays smooth
-    document.documentElement.style.setProperty("--title-width", `${Math.round(maxWidth)}px`);
+    // Content/blurb match the actual rendered title width (not the full pad band)
+    document.documentElement.style.setProperty("--title-width", `${Math.round(maxLineW)}px`);
     document.documentElement.style.setProperty("--title-bottom", `${Math.round(titleLayout.bottom)}px`);
     document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
-    fitBlurbToTitle(maxWidth);
-    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxWidth);
+    fitBlurbToTitle(maxLineW);
+    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW);
 
     return letters;
   }
