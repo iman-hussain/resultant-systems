@@ -10,6 +10,8 @@
   const FULL_TEXT = "Resultant Systems Limited";
   const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
   const LAYOUT_BREAKPOINT = 900;
+  /** Phone landscape / short browser chrome — compact layout only below this height */
+  const SHORT_HEIGHT = 500;
   // Mobile: blurb + button chrome lock to the wordmark size (one shared scale)
   const MOBILE_TYPE = {
     blurb: 0.235,
@@ -19,8 +21,18 @@
     btnGap: 0.11,
     company: 0.175,
   };
+  /** Slightly tighter type scale when viewport height is short (landscape phones) */
+  const MOBILE_TYPE_SHORT = {
+    blurb: 0.2,
+    btn: 0.2,
+    btnH: 0.82,
+    btnPadX: 0.18,
+    btnGap: 0.09,
+    company: 0.15,
+  };
   const DESKTOP_MAX_SPAN = 1800;
   const STACK_GAP_PX = 22;
+  const STACK_GAP_SHORT_PX = 12;
   const ROAM_MS = 900;
   const SNAP_MS = 100;
   const GRAB_RADIUS = 48;
@@ -52,8 +64,20 @@
   const wordmarkSelectText = wordmarkSelect?.querySelector(".wordmark-select-text");
   const DRAG_THRESHOLD = 8;
 
+  function viewportSize() {
+    const vv = window.visualViewport;
+    return {
+      w: Math.round(vv?.width || window.innerWidth),
+      h: Math.round(vv?.height || window.innerHeight),
+    };
+  }
+
   function isMobileLayout() {
-    return window.innerWidth < LAYOUT_BREAKPOINT;
+    return viewportSize().w < LAYOUT_BREAKPOINT;
+  }
+
+  function isShortViewport() {
+    return viewportSize().h < SHORT_HEIGHT;
   }
 
   function currentLayoutMode() {
@@ -115,11 +139,13 @@
     const band = width - padX * 2;
     const maxWidth = isMobileLayout() ? band : Math.min(band, DESKTOP_MAX_SPAN);
     const mobile = isMobileLayout();
+    const short = mobile && isShortViewport();
     const lines = mobile ? MOBILE_LINES : [FULL_TEXT];
-    const availableH = height * (mobile ? 0.36 : 0.28);
+    const stackGap = short ? STACK_GAP_SHORT_PX : STACK_GAP_PX;
+    const availableH = height * (mobile ? (short ? 0.24 : 0.36) : 0.28);
 
     let fontSize = mobile
-      ? Math.min(width * 0.2, availableH / (lines.length * 1.15))
+      ? Math.min(width * (short ? 0.14 : 0.2), availableH / (lines.length * 1.15))
       : Math.min(maxWidth * 0.085, availableH);
 
     const probe = document.createElement("canvas").getContext("2d");
@@ -134,6 +160,14 @@
       fontSize *= maxWidth / widest;
       widest = widestAt(fontSize);
     }
+    // Short viewports: don't let width-fit inflate past the height budget
+    if (short) {
+      const maxByHeight = availableH / (lines.length * 1.15);
+      if (fontSize > maxByHeight) {
+        fontSize = maxByHeight;
+        widest = widestAt(fontSize);
+      }
+    }
     fontSize *= 0.98;
     probe.font = `700 ${fontSize}px ${WORDMARK_FONT}`;
 
@@ -141,7 +175,11 @@
     const blockH = lineHeight * lines.length;
 
     let startY;
-    if (mobile) {
+    if (mobile && short) {
+      // Pin nearer the top so blurb + actions still fit in landscape
+      const topPad = Math.max(6, height * 0.03);
+      startY = topPad + fontSize * 0.5;
+    } else if (mobile) {
       // Vertically center the wordmark in the top half of the viewport
       const halfH = height * 0.5;
       const centerY = halfH * 0.5;
@@ -193,15 +231,16 @@
     // Content/blurb match the actual rendered title width (not the full pad band)
     document.documentElement.style.setProperty("--title-width", `${Math.round(maxLineW)}px`);
     document.documentElement.style.setProperty("--title-bottom", `${Math.round(glyphBottom)}px`);
-    document.documentElement.style.setProperty("--stack-gap", `${STACK_GAP_PX}px`);
+    document.documentElement.style.setProperty("--stack-gap", `${stackGap}px`);
     document.documentElement.style.setProperty(
       "--content-top",
-      `${Math.round(glyphBottom + STACK_GAP_PX)}px`
+      `${Math.round(glyphBottom + stackGap)}px`
     );
     document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
+    document.documentElement.classList.toggle("is-short-viewport", short);
     if (mobile) {
-      syncMobileType(fontSize, maxLineW);
+      syncMobileType(fontSize, maxLineW, short);
     } else {
       clearMobileTypeOverrides();
       fitBlurbToTitle(maxLineW);
@@ -246,12 +285,13 @@
     root.removeProperty("--company-font");
   }
 
-  function syncMobileType(titleFont, titleWidth) {
+  function syncMobileType(titleFont, titleWidth, short = false) {
     const blurb = content.querySelector(".blurb");
     const mobile = content.querySelector(".blurb-mobile");
     const root = document.documentElement.style;
-    let blurbPx = titleFont * MOBILE_TYPE.blurb;
-    const btnPx = titleFont * MOBILE_TYPE.btn;
+    const type = short ? MOBILE_TYPE_SHORT : MOBILE_TYPE;
+    let blurbPx = titleFont * type.blurb;
+    const btnPx = titleFont * type.btn;
 
     // Keep the three hard lines from wrapping (which would become 4+ visual lines)
     if (blurb && mobile && titleWidth > 0) {
@@ -287,10 +327,10 @@
     }
 
     root.setProperty("--btn-font", `${btnPx.toFixed(2)}px`);
-    root.setProperty("--btn-h", `${(titleFont * MOBILE_TYPE.btnH).toFixed(2)}px`);
-    root.setProperty("--btn-pad-x", `${(titleFont * MOBILE_TYPE.btnPadX).toFixed(2)}px`);
-    root.setProperty("--btn-gap", `${(titleFont * MOBILE_TYPE.btnGap).toFixed(2)}px`);
-    root.setProperty("--company-font", `${(titleFont * MOBILE_TYPE.company).toFixed(2)}px`);
+    root.setProperty("--btn-h", `${(titleFont * type.btnH).toFixed(2)}px`);
+    root.setProperty("--btn-pad-x", `${(titleFont * type.btnPadX).toFixed(2)}px`);
+    root.setProperty("--btn-gap", `${(titleFont * type.btnGap).toFixed(2)}px`);
+    root.setProperty("--company-font", `${(titleFont * type.company).toFixed(2)}px`);
   }
 
   function fitBlurbToTitle(titleWidth) {
@@ -387,8 +427,7 @@
 
   function resizeCanvasOnly() {
     const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-    const newW = window.innerWidth;
-    const newH = window.innerHeight;
+    const { w: newW, h: newH } = viewportSize();
     const bufW = Math.floor(newW * nextDpr);
     const bufH = Math.floor(newH * nextDpr);
     const sizeChanged = canvas.width !== bufW || canvas.height !== bufH;
@@ -430,8 +469,7 @@
 
   function ensureLayout() {
     const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
-    const newW = window.innerWidth;
-    const newH = window.innerHeight;
+    const { w: newW, h: newH } = viewportSize();
     if (
       !pendingLayout &&
       newW === width &&
@@ -449,6 +487,19 @@
     revealed = true;
     content.dataset.revealed = "true";
     setWordmarkSelectActive(true);
+    // Allow vertical scroll fallback on short viewports after the intro settles
+    canvas.style.touchAction = "pan-y";
+  }
+
+  function selectFullWordmark(e) {
+    if (!wordmarkSelectText) return;
+    e.preventDefault();
+    const selection = window.getSelection();
+    if (!selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(wordmarkSelectText);
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 
   function nearestParticle(x, y, { forSettleDrag = false } = {}) {
@@ -833,8 +884,23 @@
   const markPendingLayout = () => {
     pendingLayout = true;
   };
+
+  /** iOS often reports stale sizes on orientationchange — pulse layout after metrics settle */
+  function onOrientationChange() {
+    markPendingLayout();
+    requestAnimationFrame(() => {
+      markPendingLayout();
+      requestAnimationFrame(markPendingLayout);
+    });
+    setTimeout(markPendingLayout, 100);
+    setTimeout(markPendingLayout, 300);
+  }
+
   window.addEventListener("resize", markPendingLayout);
-  window.addEventListener("orientationchange", markPendingLayout);
+  window.addEventListener("orientationchange", onOrientationChange);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", markPendingLayout);
+  }
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", readColors);
@@ -850,6 +916,7 @@
     wordmarkSelect.addEventListener("pointermove", onPointerMove);
     wordmarkSelect.addEventListener("pointerup", onPointerUp);
     wordmarkSelect.addEventListener("pointercancel", onPointerUp);
+    wordmarkSelect.addEventListener("dblclick", selectFullWordmark);
   }
 
   // Keep drag tracking if capture moves off the original target
