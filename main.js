@@ -28,14 +28,18 @@
   let phase = PHASE.ROAM;
   let phaseStart = 0;
   let startTime = 0;
-  let titleLayout = { fontSize: 48, width: 0, bottom: 0 };
+  let titleLayout = { fontSize: 48, width: 0, bottom: 0, top: 0 };
   let layoutMode = null;
-  let grabbed = null;
   let pointer = { x: -9999, y: -9999, active: false };
+  /** @type {Map<number, { particle: object, startX: number, startY: number, dragging: boolean }>} */
+  let pointers = new Map();
   let colors = { bg: "#0a0a0a", dot: "#f2f2f0", hot: "#9ec8ff" };
   let revealed = false;
   let raf = 0;
   let resizeTimer = 0;
+  const wordmarkSelect = document.getElementById("wordmark-select");
+  const wordmarkSelectText = wordmarkSelect?.querySelector(".wordmark-select-text");
+  const DRAG_THRESHOLD = 8;
 
   function isMobileLayout() {
     return window.innerWidth < LAYOUT_BREAKPOINT;
@@ -151,15 +155,42 @@
     titleLayout = {
       fontSize,
       width: maxLineW,
+      top: startY - fontSize * 0.55,
       bottom: startY + (lines.length - 1) * lineHeight + fontSize * 0.55,
     };
 
     document.documentElement.style.setProperty("--title-width", `${Math.ceil(maxLineW)}px`);
     document.documentElement.style.setProperty("--title-bottom", `${Math.ceil(titleLayout.bottom)}px`);
     document.documentElement.style.setProperty("--page-pad", `${Math.ceil(padX)}px`);
+    document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
     fitBlurbToTitle(maxLineW);
+    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW);
 
     return letters;
+  }
+
+  function syncWordmarkSelect(mobile, fontSize, top, maxLineW) {
+    if (!wordmarkSelect || !wordmarkSelectText) return;
+    wordmarkSelectText.classList.toggle("is-stacked", !!mobile);
+    wordmarkSelectText.innerHTML = mobile
+      ? "Resultant<br />Systems<br />Limited"
+      : "Resultant Systems Limited";
+    wordmarkSelect.style.top = `${Math.max(0, top)}px`;
+    wordmarkSelect.style.width = `${Math.ceil(maxLineW)}px`;
+    document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
+  }
+
+  function setWordmarkSelectActive(active) {
+    if (!wordmarkSelect) return;
+    wordmarkSelect.hidden = !active;
+    wordmarkSelect.classList.toggle("is-active", active);
+    wordmarkSelect.setAttribute("aria-hidden", active ? "false" : "true");
+  }
+
+  function updateWordmarkDraggingState() {
+    if (!wordmarkSelect) return;
+    const anyDrag = [...pointers.values()].some((d) => d.dragging);
+    wordmarkSelect.classList.toggle("is-dragging", anyDrag);
   }
 
   function fitBlurbToTitle(titleWidth) {
@@ -207,6 +238,7 @@
         held: false,
         formed: false,
         morph: 0,
+        returning: false,
       };
     });
   }
@@ -281,6 +313,12 @@
       `${Math.ceil(Math.max(20, newW * 0.04))}px`
     );
     fitBlurbToTitle(titleLayout.width);
+    syncWordmarkSelect(
+      isMobileLayout(),
+      titleLayout.fontSize,
+      titleLayout.top,
+      titleLayout.width
+    );
   }
 
   function resizeCanvasOnly() {
@@ -353,22 +391,37 @@
     if (revealed) return;
     revealed = true;
     content.dataset.revealed = "true";
+    setWordmarkSelectActive(true);
   }
 
-  function nearestParticle(x, y) {
+  function nearestParticle(x, y, { forSettleDrag = false } = {}) {
     let best = null;
-    let bestDist = GRAB_RADIUS * GRAB_RADIUS;
+    let bestDist = Infinity;
     for (const p of particles) {
-      if (p.formed && phase === PHASE.SETTLE) continue;
+      if (isParticleClaimed(p)) continue;
+      if (forSettleDrag) {
+        if (p.returning || p.held) continue;
+        if (!p.formed) continue;
+      } else if (p.formed) {
+        continue;
+      }
+      const radius = forSettleDrag ? Math.max(GRAB_RADIUS, p.fontSize * 0.45) : GRAB_RADIUS;
       const dx = p.x - x;
       const dy = p.y - y;
       const d2 = dx * dx + dy * dy;
-      if (d2 < bestDist) {
+      if (d2 < radius * radius && d2 < bestDist) {
         bestDist = d2;
         best = p;
       }
     }
     return best;
+  }
+
+  function isParticleClaimed(p) {
+    for (const d of pointers.values()) {
+      if (d.particle === p) return true;
+    }
+    return false;
   }
 
   function pointerPos(e) {
@@ -377,18 +430,44 @@
   }
 
   function onPointerDown(e) {
-    if (phase === PHASE.SETTLE) return;
     const pos = pointerPos(e);
     pointer.x = pos.x;
     pointer.y = pos.y;
     pointer.active = true;
+
+    if (phase === PHASE.SETTLE) {
+      const hit = nearestParticle(pos.x, pos.y, { forSettleDrag: true });
+      if (!hit) return;
+      pointers.set(e.pointerId, {
+        particle: hit,
+        startX: pos.x,
+        startY: pos.y,
+        dragging: false,
+      });
+      try {
+        (e.currentTarget || wordmarkSelect || canvas).setPointerCapture?.(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      return;
+    }
+
     const hit = nearestParticle(pos.x, pos.y);
     if (hit && !hit.formed) {
-      grabbed = hit;
+      pointers.set(e.pointerId, {
+        particle: hit,
+        startX: pos.x,
+        startY: pos.y,
+        dragging: true,
+      });
       hit.held = true;
       hit.formed = false;
       hit.morph = 0;
-      canvas.setPointerCapture?.(e.pointerId);
+      try {
+        canvas.setPointerCapture?.(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
     }
   }
 
@@ -397,33 +476,85 @@
     pointer.x = pos.x;
     pointer.y = pos.y;
     pointer.active = true;
-    if (grabbed) {
-      grabbed.x = pos.x;
-      grabbed.y = pos.y;
-      grabbed.vx = 0;
-      grabbed.vy = 0;
+
+    const entry = pointers.get(e.pointerId);
+    if (!entry) return;
+
+    const p = entry.particle;
+
+    if (phase === PHASE.SETTLE && !entry.dragging) {
+      const dist = Math.hypot(pos.x - entry.startX, pos.y - entry.startY);
+      if (dist < DRAG_THRESHOLD) return;
+      entry.dragging = true;
+      p.held = true;
+      p.formed = false;
+      p.morph = 0;
+      p.returning = false;
+      window.getSelection()?.removeAllRanges();
+      updateWordmarkDraggingState();
+    }
+
+    if (entry.dragging || phase !== PHASE.SETTLE) {
+      p.x = pos.x;
+      p.y = pos.y;
+      p.vx = 0;
+      p.vy = 0;
+      if (phase === PHASE.SETTLE) {
+        p.morph = 0;
+        p.held = true;
+        p.formed = false;
+      }
     }
   }
 
-  function onPointerUp() {
-    if (grabbed) {
-      grabbed.held = false;
-      if (phase === PHASE.SNAP || phase === PHASE.SETTLE) {
-        grabbed.ox = grabbed.x;
-        grabbed.oy = grabbed.y;
+  function onPointerUp(e) {
+    const entry = pointers.get(e.pointerId);
+    if (!entry) {
+      if (pointers.size === 0) {
+        pointer.active = false;
+        pointer.x = -9999;
+        pointer.y = -9999;
       }
-      grabbed = null;
+      return;
+    }
+
+    const p = entry.particle;
+    pointers.delete(e.pointerId);
+    updateWordmarkDraggingState();
+
+    if (phase === PHASE.SETTLE) {
+      if (entry.dragging) {
+        p.held = false;
+        p.returning = true;
+        p.formed = false;
+        p.ox = p.x;
+        p.oy = p.y;
+      }
+      // Tap without drag: leave letter in place (selection may copy)
+    } else {
+      p.held = false;
+      if (phase === PHASE.SNAP) {
+        p.ox = p.x;
+        p.oy = p.y;
+      }
+    }
+
+    if (pointers.size === 0) {
+      pointer.active = false;
+      pointer.x = -9999;
+      pointer.y = -9999;
     }
   }
 
   function onPointerLeave() {
+    if (pointers.size > 0) return;
     pointer.active = false;
     pointer.x = -9999;
     pointer.y = -9999;
   }
 
   function applyPointerForce(p, dt) {
-    if (!pointer.active || p.held || p.formed) return;
+    if (!pointer.active || p.held || p.formed || p.returning) return;
     const dx = p.x - pointer.x;
     const dy = p.y - pointer.y;
     const dist = Math.hypot(dx, dy) || 1;
@@ -499,6 +630,21 @@
   function updateSettle(dt) {
     for (const p of particles) {
       if (p.held) continue;
+
+      if (p.returning) {
+        p.x += (p.tx - p.x) * Math.min(1, 16 * dt);
+        p.y += (p.ty - p.y) * Math.min(1, 16 * dt);
+        p.morph = Math.min(1, p.morph + dt * 8);
+        if (Math.hypot(p.x - p.tx, p.y - p.ty) < 1.2 && p.morph >= 0.98) {
+          p.x = p.tx;
+          p.y = p.ty;
+          p.morph = 1;
+          p.formed = true;
+          p.returning = false;
+        }
+        continue;
+      }
+
       if (!p.formed) {
         p.x += (p.tx - p.x) * Math.min(1, 18 * dt);
         p.y += (p.ty - p.y) * Math.min(1, 18 * dt);
@@ -522,8 +668,9 @@
     ctx.fillStyle = fill;
     ctx.globalAlpha = 1;
 
-    if (p.morph <= 0.02) {
-      const r = p.held ? 5.5 : 4.2;
+    const asDot = p.morph <= 0.02 || p.held;
+    if (asDot) {
+      const r = p.held ? Math.max(6, p.fontSize * 0.18) : 4.2;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -588,6 +735,7 @@
       p.morph = 1;
       p.formed = true;
       p.heat = 0;
+      p.returning = false;
     }
     draw();
     revealContent();
@@ -595,10 +743,7 @@
     function quietLoop(now) {
       const dt = Math.min(0.033, (now - (quietLoop.prev || now)) / 1000) || 0.016;
       quietLoop.prev = now;
-      for (const p of particles) {
-        p.x += (p.tx - p.x) * Math.min(1, 8 * dt);
-        p.y += (p.ty - p.y) * Math.min(1, 8 * dt);
-      }
+      updateSettle(dt);
       draw();
       raf = requestAnimationFrame(quietLoop);
     }
@@ -646,6 +791,24 @@
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", onPointerUp);
   canvas.addEventListener("pointerleave", onPointerLeave);
+
+  if (wordmarkSelect) {
+    wordmarkSelect.addEventListener("pointerdown", onPointerDown);
+    wordmarkSelect.addEventListener("pointermove", onPointerMove);
+    wordmarkSelect.addEventListener("pointerup", onPointerUp);
+    wordmarkSelect.addEventListener("pointercancel", onPointerUp);
+  }
+
+  // Keep drag tracking if capture moves off the original target
+  window.addEventListener("pointermove", (e) => {
+    if (pointers.has(e.pointerId)) onPointerMove(e);
+  });
+  window.addEventListener("pointerup", (e) => {
+    if (pointers.has(e.pointerId)) onPointerUp(e);
+  });
+  window.addEventListener("pointercancel", (e) => {
+    if (pointers.has(e.pointerId)) onPointerUp(e);
+  });
 
   start();
 })();

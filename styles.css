@@ -75,6 +75,57 @@ body {
   touch-action: none;
 }
 
+.wordmark-select {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  z-index: 2;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0;
+  max-width: calc(100% - (var(--page-pad) * 2));
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.wordmark-select.is-active {
+  pointer-events: auto;
+}
+
+.wordmark-select.is-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grabbing;
+}
+
+.wordmark-select-text {
+  margin: 0;
+  padding: 0.15em 0;
+  font-family: "Google Sans", "Google Sans Variable", "Segoe UI", sans-serif;
+  font-weight: 700;
+  font-size: var(--wordmark-size, 3rem);
+  line-height: 1.15;
+  letter-spacing: normal;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wordmark-select-text.is-stacked {
+  white-space: normal;
+}
+
+.wordmark-select-text::selection {
+  color: var(--fg);
+  -webkit-text-fill-color: var(--fg);
+  background: color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
 .stage {
   position: relative;
   z-index: 1;
