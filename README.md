@@ -33,9 +33,8 @@ After DNS propagates, GitHub will issue HTTPS for `www.resultantsystems.com`.
 ## SEO
 
 - [`robots.txt`](robots.txt) — allows crawling; points at the sitemap
-- [`sitemap.xml`](sitemap.xml) — homepage plus CV / LinkedIn / GitHub / personal / contact paths
-- JSON-LD on the homepage (Organization, WebSite, ProfessionalService, sitelink navigation)
-- Same-domain link pages under `/cv/`, `/linkedin/`, `/github/`, `/personal/`, `/contact/` so Google can show sitelinks under the main result (sitelinks appear after Google indexes the site; not instant)
+- [`sitemap.xml`](sitemap.xml) — homepage
+- JSON-LD on the homepage (Organization, WebSite, ProfessionalService) with `sameAs` links to personal site, LinkedIn, and GitHub
 
 Submit `https://resultantsystems.com/sitemap.xml` in [Google Search Console](https://search.google.com/search-console) for faster discovery.
 
