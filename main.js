@@ -226,43 +226,62 @@
     const blurb = content.querySelector(".blurb");
     if (!blurb) return;
 
-    const { fontFamily, fontWeight } = getComputedStyle(blurb);
-    const probe = document.createElement("canvas").getContext("2d");
     const mobile = isMobileLayout();
 
-    let lines;
     if (mobile) {
       const el = content.querySelector(".blurb-mobile");
       if (!el) return;
-      lines = el.innerHTML
-        .split(/<br\s*\/?>/i)
-        .map((s) =>
-          s
-            .replace(/<[^>]+>/g, "")
-            .replace(/&amp;/g, "&")
-            .replace(/\s+/g, " ")
-            .trim()
-        )
-        .filter(Boolean);
-    } else {
-      const el = content.querySelector(".blurb-desktop");
-      if (!el) return;
-      lines = [(el.textContent || "").replace(/\s+/g, " ").trim()];
+
+      const lineCountAt = (size) => {
+        blurb.style.fontSize = `${size}px`;
+        const cs = getComputedStyle(blurb);
+        let lh = parseFloat(cs.lineHeight);
+        if (!Number.isFinite(lh) || lh <= 0) lh = size * 1.4;
+        const h = el.getBoundingClientRect().height;
+        return Math.max(1, Math.round(h / lh));
+      };
+
+      // Largest font that wraps to exactly 3 lines within the title width
+      let lo = 8;
+      let hi = 48;
+      let best = lo;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        const n = lineCountAt(mid);
+        if (n > 3) hi = mid;
+        else if (n < 3) lo = mid;
+        else {
+          best = mid;
+          lo = mid;
+        }
+      }
+
+      if (lineCountAt(best) !== 3) {
+        for (let s = 48; s >= 8; s -= 0.25) {
+          if (lineCountAt(s) === 3) {
+            best = s;
+            break;
+          }
+        }
+      }
+
+      blurb.style.fontSize = `${best.toFixed(2)}px`;
+      return;
     }
 
-    if (!lines.length) return;
-
-    const fits = (size) => {
-      probe.font = `${fontWeight} ${size}px ${fontFamily}`;
-      return lines.every((line) => probe.measureText(line).width <= titleWidth);
-    };
+    const desktop = content.querySelector(".blurb-desktop");
+    if (!desktop) return;
+    const text = (desktop.textContent || "").replace(/\s+/g, " ").trim();
+    const { fontFamily, fontWeight } = getComputedStyle(blurb);
+    const probe = document.createElement("canvas").getContext("2d");
 
     let lo = 8;
-    let hi = mobile ? 42 : 64;
+    let hi = 64;
     for (let i = 0; i < 18; i++) {
       const mid = (lo + hi) / 2;
-      if (fits(mid)) lo = mid;
-      else hi = mid;
+      probe.font = `${fontWeight} ${mid}px ${fontFamily}`;
+      if (probe.measureText(text).width > titleWidth) hi = mid;
+      else lo = mid;
     }
     blurb.style.fontSize = `${lo.toFixed(2)}px`;
   }
