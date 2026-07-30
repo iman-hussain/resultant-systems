@@ -103,10 +103,10 @@
     const maxWidth = width - padX * 2;
     const mobile = isMobileLayout();
     const lines = mobile ? MOBILE_LINES : [FULL_TEXT];
-    const availableH = height * (mobile ? 0.42 : 0.28);
+    const availableH = height * (mobile ? 0.32 : 0.28);
 
     let fontSize = mobile
-      ? Math.min(width * 0.22, availableH / (lines.length * 1.15))
+      ? Math.min(width * 0.2, availableH / (lines.length * 1.15))
       : Math.min(width * 0.085, availableH);
 
     const probe = document.createElement("canvas").getContext("2d");
@@ -126,7 +126,7 @@
 
     const lineHeight = fontSize * 1.15;
     const blockH = lineHeight * lines.length;
-    const startY = height * (mobile ? 0.2 : 0.3) - blockH / 2 + lineHeight / 2;
+    const startY = height * (mobile ? 0.16 : 0.3) - blockH / 2 + lineHeight / 2;
 
     const letters = [];
     let maxLineW = 0;

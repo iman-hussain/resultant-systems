@@ -25,11 +25,11 @@
   --title-width: calc(100vw - (var(--page-pad) * 2));
   --title-bottom: 38vh;
   --page-pad: max(20px, 4vw);
-  --btn-h: clamp(2.35rem, 4.2vw, 3.4rem);
-  --btn-gap: clamp(0.45rem, 1.2vw, 0.85rem);
-  --btn-font: clamp(0.8rem, 1.55vw, 1.15rem);
-  --btn-pad-x: clamp(0.85rem, 2vw, 1.5rem);
-  --icon-svg: clamp(16px, 1.8vw, 22px);
+  --btn-h: 3.5rem;
+  --btn-gap: 0.65rem;
+  --btn-font: clamp(0.95rem, 3.6vw, 1.1rem);
+  --btn-pad-x: clamp(0.75rem, 3vw, 1.25rem);
+  --icon-svg: 1.4rem;
 }
 
 @media (prefers-color-scheme: light) {
@@ -135,9 +135,8 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: calc(var(--title-bottom) + clamp(0.75rem, 2.5vh, 1.75rem)) 0
-    clamp(1rem, 3vh, 2rem);
+  justify-content: flex-end;
+  padding: 0 0 max(1.25rem, env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -149,6 +148,8 @@ body {
   transform: translateY(0.6rem);
   transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
   pointer-events: none;
+  /* Sit actions around the lower third of the viewport */
+  margin-bottom: clamp(10vh, 18vh, 26vh);
 }
 
 .content[data-revealed="true"] {
@@ -195,22 +196,12 @@ body {
 }
 
 .company-number {
-  margin: auto 0 0;
-  padding: 0 var(--page-pad);
+  margin: 0.9rem 0 0;
   font-size: clamp(0.85rem, 2.8vw, 1.05rem);
   letter-spacing: 0.03em;
   color: var(--fg-muted);
   white-space: nowrap;
   text-align: center;
-  opacity: 0;
-  transform: translateY(0.4rem);
-  transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
-  pointer-events: none;
-}
-
-.content[data-revealed="true"] ~ .company-number {
-  opacity: 1;
-  transform: translateY(0);
 }
 
 .btn {
@@ -224,7 +215,7 @@ body {
   min-width: 0;
   padding: 0 var(--btn-pad-x);
   border: 1px solid var(--btn-border);
-  border-radius: 0.35rem;
+  border-radius: 0.45rem;
   background: var(--btn-bg);
   color: var(--fg);
   font: inherit;
@@ -251,12 +242,14 @@ body {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: auto;
-  height: var(--btn-h);
   flex: 1 1 0;
   min-width: 0;
+  width: auto;
+  aspect-ratio: 1 / 1;
+  height: auto;
+  min-height: var(--btn-h);
   border: 1px solid var(--btn-border);
-  border-radius: 0.35rem;
+  border-radius: 0.45rem;
   color: var(--fg);
   text-decoration: none;
   transition: background 0.25s var(--ease), border-color 0.25s var(--ease),
@@ -305,6 +298,16 @@ body {
     --icon-svg: clamp(18px, 1.6vw, 24px);
   }
 
+  .stage {
+    justify-content: flex-start;
+    padding: calc(var(--title-bottom) + clamp(0.75rem, 2.5vh, 1.75rem)) 0
+      clamp(1rem, 3vh, 2rem);
+  }
+
+  .content {
+    margin-bottom: 0;
+  }
+
   .blurb {
     font-size: clamp(0.7rem, 1.35vw, 1.2rem);
     text-align: center;
@@ -335,6 +338,7 @@ body {
   .btn {
     flex: 0 1 auto;
     min-width: 9rem;
+    border-radius: 0.35rem;
   }
 
   .icon-row {
@@ -345,6 +349,10 @@ body {
   .icon-btn {
     flex: 0 0 var(--btn-h);
     width: var(--btn-h);
+    height: var(--btn-h);
+    min-height: var(--btn-h);
+    aspect-ratio: auto;
+    border-radius: 0.35rem;
   }
 
   .company-number {
@@ -353,8 +361,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .content,
-  .company-number {
+  .content {
     transition: none;
   }
 }
