@@ -9,7 +9,7 @@
   const WORDMARK_FONT = '"Google Sans", "Google Sans Variable", "Segoe UI", sans-serif';
   const FULL_TEXT = "Resultant Systems Limited";
   const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
-  const LAYOUT_BREAKPOINT = 721;
+  const LAYOUT_BREAKPOINT = 900;
   const DESKTOP_MAX_SPAN = 1800;
   const ROAM_MS = 900;
   const SNAP_MS = 100;

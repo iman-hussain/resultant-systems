@@ -299,7 +299,7 @@ body {
 }
 
 /* Desktop: one line name (canvas), one line blurb, one line buttons, one line company */
-@media (min-width: 721px) {
+@media (min-width: 900px) {
   :root {
     --btn-h: clamp(2.6rem, 3.8vw, 3.75rem);
     --btn-gap: clamp(0.55rem, 1.1vw, 1rem);
