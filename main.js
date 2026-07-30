@@ -36,7 +36,6 @@
   let colors = { bg: "#0a0a0a", dot: "#f2f2f0", hot: "#9ec8ff" };
   let revealed = false;
   let raf = 0;
-  let resizeTimer = 0;
   const wordmarkSelect = document.getElementById("wordmark-select");
   const wordmarkSelectText = wordmarkSelect?.querySelector(".wordmark-select-text");
   const DRAG_THRESHOLD = 8;
@@ -154,17 +153,18 @@
 
     titleLayout = {
       fontSize,
-      width: maxLineW,
+      width: maxWidth,
       top: startY - fontSize * 0.55,
       bottom: startY + (lines.length - 1) * lineHeight + fontSize * 0.55,
     };
 
-    document.documentElement.style.setProperty("--title-width", `${Math.ceil(maxLineW)}px`);
-    document.documentElement.style.setProperty("--title-bottom", `${Math.ceil(titleLayout.bottom)}px`);
-    document.documentElement.style.setProperty("--page-pad", `${Math.ceil(padX)}px`);
+    // Content width tracks the pad band (not measured glyph width) so resize stays smooth
+    document.documentElement.style.setProperty("--title-width", `${Math.round(maxWidth)}px`);
+    document.documentElement.style.setProperty("--title-bottom", `${Math.round(titleLayout.bottom)}px`);
+    document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
-    fitBlurbToTitle(maxLineW);
-    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW);
+    fitBlurbToTitle(maxWidth);
+    syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxWidth);
 
     return letters;
   }
@@ -209,13 +209,14 @@
 
     let lo = 8;
     let hi = 64;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 18; i++) {
       const mid = (lo + hi) / 2;
       probe.font = `${fontWeight} ${mid}px ${fontFamily}`;
       if (probe.measureText(text).width > titleWidth) hi = mid;
       else lo = mid;
     }
-    blurb.style.fontSize = `${Math.floor(lo * 100) / 100}px`;
+    // Sub-pixel size avoids visible jumps while dragging the window
+    blurb.style.fontSize = `${lo.toFixed(2)}px`;
   }
 
   function createParticles() {
@@ -290,37 +291,6 @@
     });
   }
 
-  function scaleScene(oldW, oldH, newW, newH) {
-    if (!oldW || !oldH) return;
-    const sx = newW / oldW;
-    const sy = newH / oldH;
-    for (const p of particles) {
-      p.x *= sx;
-      p.y *= sy;
-      p.tx *= sx;
-      p.ty *= sy;
-      if (p.ox != null) p.ox *= sx;
-      if (p.oy != null) p.oy *= sy;
-      p.fontSize *= Math.min(sx, sy);
-    }
-    titleLayout.width *= sx;
-    titleLayout.bottom *= sy;
-    titleLayout.fontSize *= Math.min(sx, sy);
-    document.documentElement.style.setProperty("--title-width", `${Math.ceil(titleLayout.width)}px`);
-    document.documentElement.style.setProperty("--title-bottom", `${Math.ceil(titleLayout.bottom)}px`);
-    document.documentElement.style.setProperty(
-      "--page-pad",
-      `${Math.ceil(Math.max(20, newW * 0.04))}px`
-    );
-    fitBlurbToTitle(titleLayout.width);
-    syncWordmarkSelect(
-      isMobileLayout(),
-      titleLayout.fontSize,
-      titleLayout.top,
-      titleLayout.width
-    );
-  }
-
   function resizeCanvasOnly() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const newW = window.innerWidth;
@@ -334,8 +304,6 @@
   }
 
   function fullRelayout() {
-    const oldW = width;
-    const oldH = height;
     const { newW, newH } = resizeCanvasOnly();
     width = newW;
     height = newH;
@@ -348,43 +316,16 @@
     }
 
     const targets = buildLetterTargets();
-    if (phase === PHASE.ROAM || phase === PHASE.SNAP) {
-      // Keep roaming positions; only refresh slot geometry for later nearest assign
+    if (phase === PHASE.SNAP) {
       applyTargetsInOrder(targets);
-      if (phase === PHASE.SNAP) assignNearestLetters(targets);
+      assignNearestLetters(targets);
     } else {
       applyTargetsInOrder(targets);
     }
   }
 
   function handleResize() {
-    const mode = currentLayoutMode();
-    const modeChanged = layoutMode != null && mode !== layoutMode;
-    const oldW = width;
-    const oldH = height;
-    const { newW, newH } = resizeCanvasOnly();
-
-    if (!particles.length) {
-      width = newW;
-      height = newH;
-      layoutMode = mode;
-      createParticles();
-      return;
-    }
-
-    if (modeChanged) {
-      width = newW;
-      height = newH;
-      layoutMode = mode;
-      const targets = buildLetterTargets();
-      applyTargetsInOrder(targets);
-      return;
-    }
-
-    // Same layout mode: scale scene smoothly — no full rebuild while dragging the window
-    width = newW;
-    height = newH;
-    scaleScene(oldW, oldH, newW, newH);
+    fullRelayout();
   }
 
   function revealContent() {
@@ -771,16 +712,13 @@
     raf = requestAnimationFrame(tick);
   }
 
+  let resizeRaf = 0;
   window.addEventListener("resize", () => {
-    handleResize();
-    // After resize settles, rebuild metrics once so text stays crisp (debounced)
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (phase !== PHASE.SETTLE && phase !== PHASE.ROAM) return;
-      if (phase === PHASE.ROAM) return; // don't rebuild mid-roam
-      const targets = buildLetterTargets();
-      applyTargetsInOrder(targets);
-    }, 180);
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0;
+      handleResize();
+    });
   });
 
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);

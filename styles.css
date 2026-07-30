@@ -22,7 +22,7 @@
   --btn-hover-bg: rgba(242, 242, 240, 0.08);
   --focus: #9ec8ff;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --title-width: min(92vw, 72rem);
+  --title-width: calc(100vw - (var(--page-pad) * 2));
   --title-bottom: 38vh;
   --page-pad: max(20px, 4vw);
   --btn-h: clamp(2.35rem, 4.2vw, 3.4rem);
@@ -143,7 +143,7 @@ body {
 
 .content {
   width: var(--title-width);
-  max-width: calc(100% - (var(--page-pad) * 2));
+  max-width: 100%;
   text-align: center;
   opacity: 0;
   transform: translateY(0.6rem);
@@ -164,7 +164,8 @@ body {
   line-height: 1.4;
   color: var(--fg-muted);
   text-align: justify;
-  text-align-last: center;
+  text-justify: inter-word;
+  hyphens: none;
 }
 
 .blurb-desktop {
@@ -181,7 +182,7 @@ body {
   align-items: stretch;
   justify-content: center;
   gap: var(--btn-gap);
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   width: 100%;
 }
 
@@ -196,11 +197,22 @@ body {
 }
 
 .company-number {
-  margin: 0;
+  margin: auto 0 0;
+  padding: 0 var(--page-pad);
   font-size: clamp(0.85rem, 2.8vw, 1.05rem);
   letter-spacing: 0.03em;
   color: var(--fg-muted);
   white-space: nowrap;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(0.4rem);
+  transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
+  pointer-events: none;
+}
+
+.content[data-revealed="true"] ~ .company-number {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .btn {
@@ -298,7 +310,7 @@ body {
   .blurb {
     font-size: clamp(0.7rem, 1.35vw, 1.2rem);
     text-align: center;
-    text-align-last: center;
+    text-justify: auto;
   }
 
   .blurb-desktop {
@@ -344,7 +356,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .content {
+  .content,
+  .company-number {
     transition: none;
   }
 }
