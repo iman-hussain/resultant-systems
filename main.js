@@ -14,7 +14,7 @@
   const MOBILE_TYPE = {
     blurb: 0.235,
     btn: 0.235,
-    btnH: 0.78,
+    btnH: 0.92,
     btnPadX: 0.22,
     btnGap: 0.11,
     company: 0.175,
