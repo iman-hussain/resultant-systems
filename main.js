@@ -128,7 +128,21 @@
 
     const lineHeight = fontSize * 1.15;
     const blockH = lineHeight * lines.length;
-    const startY = height * (mobile ? 0.16 : 0.3) - blockH / 2 + lineHeight / 2;
+
+    let startY;
+    if (mobile) {
+      // Sit the wordmark just above the description / actions block
+      const gap = 16;
+      const contentTop = content.getBoundingClientRect().top;
+      const titleBottom =
+        contentTop > 40 ? contentTop - gap : height - Math.min(height * 0.42, 360);
+      startY = titleBottom - blockH + lineHeight / 2;
+      const minY = lineHeight * 0.6;
+      const maxY = height * 0.55;
+      startY = Math.max(minY, Math.min(maxY, startY));
+    } else {
+      startY = height * 0.3 - blockH / 2 + lineHeight / 2;
+    }
 
     const letters = [];
     let maxLineW = 0;
@@ -703,6 +717,13 @@
       /* fall back */
     }
     fullRelayout();
+    // Second pass once flex layout has settled (mobile title sits above description)
+    requestAnimationFrame(() => {
+      if (isMobileLayout() && particles.length) {
+        const targets = buildLetterTargets();
+        applyTargetsInOrder(targets);
+      }
+    });
     startTime = performance.now();
     phaseStart = startTime;
     phase = PHASE.ROAM;

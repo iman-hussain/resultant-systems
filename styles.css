@@ -30,7 +30,7 @@
   --btn-gap: 0.65rem;
   --btn-font: clamp(0.95rem, 3.6vw, 1.1rem);
   --btn-pad-x: clamp(0.75rem, 3vw, 1.25rem);
-  --icon-svg: 1.4rem;
+  --icon-svg: 1.85rem;
 }
 
 @media (prefers-color-scheme: light) {
@@ -137,7 +137,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 0 max(1.25rem, env(safe-area-inset-bottom, 0px));
+  padding: 0 0 max(0.85rem, env(safe-area-inset-bottom, 0px));
   pointer-events: none;
 }
 
@@ -149,8 +149,7 @@ body {
   transform: translateY(0.6rem);
   transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
   pointer-events: none;
-  /* Sit actions around the lower third of the viewport */
-  margin-bottom: clamp(10vh, 18vh, 26vh);
+  margin-bottom: 0.85rem;
 }
 
 .content[data-revealed="true"] {
@@ -197,12 +196,22 @@ body {
 }
 
 .company-number {
-  margin: 0.9rem 0 0;
+  margin: 0;
+  width: var(--title-width);
+  max-width: 100%;
   font-size: clamp(0.85rem, 2.8vw, 1.05rem);
   letter-spacing: 0.03em;
   color: var(--fg-muted);
   white-space: nowrap;
   text-align: center;
+  opacity: 0;
+  transform: translateY(0.4rem);
+  transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
+}
+
+.content[data-revealed="true"] ~ .company-number {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .btn {
@@ -309,6 +318,15 @@ body {
     margin-bottom: 0;
   }
 
+  .company-number {
+    margin-top: 1rem;
+    opacity: 0;
+  }
+
+  .content[data-revealed="true"] ~ .company-number {
+    opacity: 1;
+  }
+
   .blurb {
     font-size: clamp(0.7rem, 1.35vw, 1.2rem);
     text-align: center;
@@ -362,7 +380,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .content {
+  .content,
+  .company-number {
     transition: none;
   }
 }
