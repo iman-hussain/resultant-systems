@@ -105,7 +105,7 @@
     const maxWidth = isMobileLayout() ? band : Math.min(band, DESKTOP_MAX_SPAN);
     const mobile = isMobileLayout();
     const lines = mobile ? MOBILE_LINES : [FULL_TEXT];
-    const availableH = height * (mobile ? 0.32 : 0.28);
+    const availableH = height * (mobile ? 0.36 : 0.28);
 
     let fontSize = mobile
       ? Math.min(width * 0.2, availableH / (lines.length * 1.15))
@@ -131,15 +131,16 @@
 
     let startY;
     if (mobile) {
-      // Sit the wordmark just above the description / actions block
-      const gap = 16;
-      const contentTop = content.getBoundingClientRect().top;
-      const titleBottom =
-        contentTop > 40 ? contentTop - gap : height - Math.min(height * 0.42, 360);
-      startY = titleBottom - blockH + lineHeight / 2;
-      const minY = lineHeight * 0.6;
-      const maxY = height * 0.55;
-      startY = Math.max(minY, Math.min(maxY, startY));
+      // Vertically center the wordmark in the top half of the viewport
+      const halfH = height * 0.5;
+      const centerY = halfH * 0.5;
+      startY = centerY - blockH / 2 + lineHeight / 2;
+      const titleBottom = startY + (lines.length - 1) * lineHeight + fontSize * 0.55;
+      const maxBottom = halfH - 10;
+      if (titleBottom > maxBottom) {
+        startY -= titleBottom - maxBottom;
+      }
+      startY = Math.max(lineHeight * 0.55, startY);
     } else {
       startY = height * 0.3 - blockH / 2 + lineHeight / 2;
     }
@@ -717,13 +718,6 @@
       /* fall back */
     }
     fullRelayout();
-    // Second pass once flex layout has settled (mobile title sits above description)
-    requestAnimationFrame(() => {
-      if (isMobileLayout() && particles.length) {
-        const targets = buildLetterTargets();
-        applyTargetsInOrder(targets);
-      }
-    });
     startTime = performance.now();
     phaseStart = startTime;
     phase = PHASE.ROAM;
