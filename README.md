@@ -1,6 +1,6 @@
 # Resultant Systems
 
-One-page landing site for [Resultant Systems Limited](https://www.resultantsystems.com) — AI, Data and Tech consulting.
+One-page landing site for [Resultant Systems Limited](https://www.resultantsystems.com) — AI, Data & Tech Solutions.
 
 ## Stack
 
