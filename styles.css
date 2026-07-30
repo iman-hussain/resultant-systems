@@ -163,9 +163,7 @@ body {
   font-size: clamp(0.95rem, 3.2vw, 1.25rem);
   line-height: 1.4;
   color: var(--fg-muted);
-  text-align: justify;
-  text-justify: inter-word;
-  hyphens: none;
+  text-align: center;
 }
 
 .blurb-desktop {
@@ -310,7 +308,6 @@ body {
   .blurb {
     font-size: clamp(0.7rem, 1.35vw, 1.2rem);
     text-align: center;
-    text-justify: auto;
   }
 
   .blurb-desktop {
