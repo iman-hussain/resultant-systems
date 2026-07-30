@@ -201,7 +201,7 @@
     document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
     if (mobile) {
-      syncMobileType(fontSize);
+      syncMobileType(fontSize, maxLineW);
     } else {
       clearMobileTypeOverrides();
       fitBlurbToTitle(maxLineW);
@@ -246,13 +246,46 @@
     root.removeProperty("--company-font");
   }
 
-  function syncMobileType(titleFont) {
+  function syncMobileType(titleFont, titleWidth) {
     const blurb = content.querySelector(".blurb");
+    const mobile = content.querySelector(".blurb-mobile");
     const root = document.documentElement.style;
-    const blurbPx = titleFont * MOBILE_TYPE.blurb;
+    let blurbPx = titleFont * MOBILE_TYPE.blurb;
     const btnPx = titleFont * MOBILE_TYPE.btn;
 
-    if (blurb) blurb.style.fontSize = `${blurbPx.toFixed(2)}px`;
+    // Keep the three hard lines from wrapping (which would become 4+ visual lines)
+    if (blurb && mobile && titleWidth > 0) {
+      const lines = mobile.innerHTML
+        .split(/<br\s*\/?>/i)
+        .map((s) =>
+          s
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/\s+/g, " ")
+            .trim()
+        )
+        .filter(Boolean);
+      const { fontFamily, fontWeight } = getComputedStyle(blurb);
+      const probe = document.createElement("canvas").getContext("2d");
+      const fits = (size) => {
+        probe.font = `${fontWeight} ${size}px ${fontFamily}`;
+        return lines.every((line) => probe.measureText(line).width <= titleWidth);
+      };
+      if (!fits(blurbPx)) {
+        let lo = 8;
+        let hi = blurbPx;
+        for (let i = 0; i < 18; i++) {
+          const mid = (lo + hi) / 2;
+          if (fits(mid)) lo = mid;
+          else hi = mid;
+        }
+        blurbPx = lo;
+      }
+      blurb.style.fontSize = `${blurbPx.toFixed(2)}px`;
+    } else if (blurb) {
+      blurb.style.fontSize = `${blurbPx.toFixed(2)}px`;
+    }
+
     root.setProperty("--btn-font", `${btnPx.toFixed(2)}px`);
     root.setProperty("--btn-h", `${(titleFont * MOBILE_TYPE.btnH).toFixed(2)}px`);
     root.setProperty("--btn-pad-x", `${(titleFont * MOBILE_TYPE.btnPadX).toFixed(2)}px`);
