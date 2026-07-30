@@ -10,6 +10,15 @@
   const FULL_TEXT = "Resultant Systems Limited";
   const MOBILE_LINES = ["Resultant", "Systems", "Limited"];
   const LAYOUT_BREAKPOINT = 900;
+  // Mobile: blurb + button chrome lock to the wordmark size (one shared scale)
+  const MOBILE_TYPE = {
+    blurb: 0.235,
+    btn: 0.235,
+    btnH: 0.78,
+    btnPadX: 0.22,
+    btnGap: 0.11,
+    company: 0.175,
+  };
   const DESKTOP_MAX_SPAN = 1800;
   const STACK_GAP_PX = 22;
   const ROAM_MS = 900;
@@ -190,10 +199,13 @@
     );
     document.documentElement.style.setProperty("--page-pad", `${Math.round(padX)}px`);
     document.documentElement.style.setProperty("--wordmark-size", `${fontSize}px`);
-    fitBlurbToTitle(maxLineW);
+    if (mobile) {
+      syncMobileType(fontSize);
+    } else {
+      clearMobileTypeOverrides();
+      fitBlurbToTitle(maxLineW);
+    }
     syncWordmarkSelect(mobile, fontSize, titleLayout.top, maxLineW);
-    // Button widths depend on --title-width; fit labels on the next frame
-    requestAnimationFrame(() => fitButtonLabels());
 
     return letters;
   }
@@ -222,55 +234,36 @@
     wordmarkSelect.classList.toggle("is-dragging", anyDrag);
   }
 
+  function clearMobileTypeOverrides() {
+    const blurb = content.querySelector(".blurb");
+    if (blurb) blurb.style.fontSize = "";
+    const root = document.documentElement.style;
+    root.removeProperty("--btn-font");
+    root.removeProperty("--btn-h");
+    root.removeProperty("--btn-pad-x");
+    root.removeProperty("--btn-gap");
+    root.removeProperty("--company-font");
+  }
+
+  function syncMobileType(titleFont) {
+    const blurb = content.querySelector(".blurb");
+    const root = document.documentElement.style;
+    const blurbPx = titleFont * MOBILE_TYPE.blurb;
+    const btnPx = titleFont * MOBILE_TYPE.btn;
+
+    if (blurb) blurb.style.fontSize = `${blurbPx.toFixed(2)}px`;
+    root.setProperty("--btn-font", `${btnPx.toFixed(2)}px`);
+    root.setProperty("--btn-h", `${(titleFont * MOBILE_TYPE.btnH).toFixed(2)}px`);
+    root.setProperty("--btn-pad-x", `${(titleFont * MOBILE_TYPE.btnPadX).toFixed(2)}px`);
+    root.setProperty("--btn-gap", `${(titleFont * MOBILE_TYPE.btnGap).toFixed(2)}px`);
+    root.setProperty("--company-font", `${(titleFont * MOBILE_TYPE.company).toFixed(2)}px`);
+  }
+
   function fitBlurbToTitle(titleWidth) {
     const blurb = content.querySelector(".blurb");
-    if (!blurb) return;
-
-    const mobile = isMobileLayout();
-
-    if (mobile) {
-      const el = content.querySelector(".blurb-mobile");
-      if (!el) return;
-
-      const lineCountAt = (size) => {
-        blurb.style.fontSize = `${size}px`;
-        const cs = getComputedStyle(blurb);
-        let lh = parseFloat(cs.lineHeight);
-        if (!Number.isFinite(lh) || lh <= 0) lh = size * 1.4;
-        const h = el.getBoundingClientRect().height;
-        return Math.max(1, Math.round(h / lh));
-      };
-
-      // Largest font that wraps to exactly 3 lines within the title width
-      let lo = 8;
-      let hi = 48;
-      let best = lo;
-      for (let i = 0; i < 20; i++) {
-        const mid = (lo + hi) / 2;
-        const n = lineCountAt(mid);
-        if (n > 3) hi = mid;
-        else if (n < 3) lo = mid;
-        else {
-          best = mid;
-          lo = mid;
-        }
-      }
-
-      if (lineCountAt(best) !== 3) {
-        for (let s = 48; s >= 8; s -= 0.25) {
-          if (lineCountAt(s) === 3) {
-            best = s;
-            break;
-          }
-        }
-      }
-
-      blurb.style.fontSize = `${best.toFixed(2)}px`;
-      return;
-    }
-
     const desktop = content.querySelector(".blurb-desktop");
-    if (!desktop) return;
+    if (!blurb || !desktop) return;
+
     const text = (desktop.textContent || "").replace(/\s+/g, " ").trim();
     const { fontFamily, fontWeight } = getComputedStyle(blurb);
     const probe = document.createElement("canvas").getContext("2d");
@@ -284,47 +277,6 @@
       else lo = mid;
     }
     blurb.style.fontSize = `${lo.toFixed(2)}px`;
-  }
-
-  function fitButtonLabels() {
-    const buttons = [...content.querySelectorAll(".btn-row .btn")];
-    if (!buttons.length) return;
-
-    if (!isMobileLayout()) {
-      buttons.forEach((b) => {
-        b.style.fontSize = "";
-      });
-      return;
-    }
-
-    const minWidth = Math.min(...buttons.map((b) => b.getBoundingClientRect().width));
-    const cs = getComputedStyle(buttons[0]);
-    const padX =
-      (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-    const avail = Math.max(32, minWidth - padX - 6);
-    const btnH = buttons[0].getBoundingClientRect().height || 56;
-    const labels = buttons.map((b) => (b.textContent || "").replace(/\s+/g, " ").trim());
-    const fontFamily = cs.fontFamily;
-    const fontWeight = cs.fontWeight;
-    const probe = document.createElement("canvas").getContext("2d");
-
-    const fits = (size) => {
-      probe.font = `${fontWeight} ${size}px ${fontFamily}`;
-      return labels.every((label) => probe.measureText(label).width <= avail);
-    };
-
-    let lo = 10;
-    let hi = Math.min(btnH * 0.42, 34);
-    for (let i = 0; i < 18; i++) {
-      const mid = (lo + hi) / 2;
-      if (fits(mid)) lo = mid;
-      else hi = mid;
-    }
-
-    const size = `${lo.toFixed(2)}px`;
-    buttons.forEach((b) => {
-      b.style.fontSize = size;
-    });
   }
 
   function createParticles() {

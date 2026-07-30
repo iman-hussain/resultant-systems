@@ -203,7 +203,7 @@ body {
   margin: auto 0 0;
   width: var(--title-width);
   max-width: 100%;
-  font-size: clamp(0.85rem, 2.8vw, 1.05rem);
+  font-size: var(--company-font, clamp(0.85rem, 2.8vw, 1.05rem));
   letter-spacing: 0.03em;
   color: var(--fg-muted);
   white-space: nowrap;
@@ -275,6 +275,13 @@ body {
   height: 52%;
   max-width: 2.75rem;
   max-height: 2.75rem;
+}
+
+@media (max-width: 899px) {
+  .icon-btn svg {
+    max-width: none;
+    max-height: none;
+  }
 }
 
 .icon-btn:hover {
