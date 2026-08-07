@@ -40,6 +40,12 @@
   /** Underdamped spring for drag-release snap-back (overshoots, then settles). */
   const RETURN_STIFFNESS = 260;
   const RETURN_DAMPING = 14;
+  /** Soft radial push from a held drag-dot onto neighbors / UI. */
+  const BUMP_LETTER_RADIUS = 1.1;
+  const BUMP_LETTER_FORCE = 3200;
+  const BUMP_UI_RADIUS = 130;
+  const BUMP_UI_FORCE = 4200;
+  const BUMP_UI_MAX = 56;
 
   const PHASE = {
     ROAM: "roam",
@@ -65,6 +71,12 @@
   let pendingLayout = false;
   /** At snap start: were any free dots still in/below the content band? */
   let snapHadDotsInContent = false;
+  /**
+   * DOM soft bodies displaced by a held drag-dot.
+   * @type {{ el: HTMLElement, hx: number, hy: number, bx: number, by: number, bvx: number, bvy: number }[]}
+   */
+  let uiBodies = [];
+  let uiBodiesDirty = true;
   const wordmarkSelect = document.getElementById("wordmark-select");
   const wordmarkSelectText = wordmarkSelect?.querySelector(".wordmark-select-text");
   const DRAG_THRESHOLD = 8;
@@ -609,6 +621,7 @@
         formed: false,
         morph: 0,
         returning: false,
+        displaced: false,
       };
     });
   }
@@ -670,6 +683,9 @@
         p.y = p.ty;
         p.morph = 1;
         p.formed = true;
+        p.displaced = false;
+        p.vx = 0;
+        p.vy = 0;
       }
     });
   }
@@ -701,6 +717,7 @@
     height = newH;
     readColors();
     layoutMode = currentLayoutMode();
+    uiBodiesDirty = true;
 
     if (!particles.length) {
       createParticles();
@@ -736,6 +753,7 @@
     revealed = true;
     content.dataset.revealed = "true";
     setWordmarkSelectActive(true);
+    uiBodiesDirty = true;
     // Allow vertical scroll fallback on short viewports after the intro settles
     canvas.style.touchAction = "pan-y";
   }
@@ -1006,21 +1024,175 @@
     }
   }
 
+  function getHeldDots() {
+    const held = [];
+    for (const p of particles) {
+      if (p.held) held.push(p);
+    }
+    return held;
+  }
+
+  /** Radial repulsion acceleration from (hx,hy) onto a point at (px,py). */
+  function bumpAccel(px, py, hx, hy, radius, force) {
+    const dx = px - hx;
+    const dy = py - hy;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= radius || dist < 1e-4) return { ax: 0, ay: 0, hit: false };
+    const t = 1 - dist / radius;
+    const mag = t * t * force;
+    return { ax: (dx / dist) * mag, ay: (dy / dist) * mag, hit: true };
+  }
+
+  function letterBumpAccel(p, heldDots) {
+    let ax = 0;
+    let ay = 0;
+    let hit = false;
+    for (const h of heldDots) {
+      const radius = Math.max(48, h.fontSize * BUMP_LETTER_RADIUS);
+      const a = bumpAccel(p.x, p.y, h.x, h.y, radius, BUMP_LETTER_FORCE);
+      ax += a.ax;
+      ay += a.ay;
+      if (a.hit) hit = true;
+    }
+    return { ax, ay, hit };
+  }
+
+  function springToward(p, tx, ty, dt, extraAx, extraAy) {
+    const ax = (tx - p.x) * RETURN_STIFFNESS - p.vx * RETURN_DAMPING + extraAx;
+    const ay = (ty - p.y) * RETURN_STIFFNESS - p.vy * RETURN_DAMPING + extraAy;
+    p.vx += ax * dt;
+    p.vy += ay * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+  }
+
+  function collectUiElements() {
+    /** @type {HTMLElement[]} */
+    const els = [];
+    const blurb = content.querySelector(".blurb");
+    if (blurb instanceof HTMLElement) els.push(blurb);
+    content.querySelectorAll(".btn, .icon-btn").forEach((el) => {
+      if (el instanceof HTMLElement) els.push(el);
+    });
+    const company = document.getElementById("company-number");
+    const theme = document.getElementById("theme-toggle");
+    if (company instanceof HTMLElement) els.push(company);
+    if (theme instanceof HTMLElement) els.push(theme);
+    return els;
+  }
+
+  function applyUiBumpStyle(body) {
+    body.el.style.setProperty("--bump-x", `${body.bx.toFixed(2)}px`);
+    body.el.style.setProperty("--bump-y", `${body.by.toFixed(2)}px`);
+  }
+
+  function rebuildUiBodies() {
+    const prev = new Map(uiBodies.map((b) => [b.el, b]));
+    const els = collectUiElements();
+    for (const el of els) {
+      el.style.setProperty("--bump-x", "0px");
+      el.style.setProperty("--bump-y", "0px");
+    }
+    // Force layout with bumps cleared so homes stay stable
+    void content.offsetHeight;
+    uiBodies = els.map((el) => {
+      const old = prev.get(el);
+      const r = el.getBoundingClientRect();
+      return {
+        el,
+        hx: r.left + r.width / 2,
+        hy: r.top + r.height / 2,
+        bx: old?.bx || 0,
+        by: old?.by || 0,
+        bvx: old?.bvx || 0,
+        bvy: old?.bvy || 0,
+      };
+    });
+    for (const b of uiBodies) applyUiBumpStyle(b);
+  }
+
+  function resetUiBumps() {
+    for (const b of uiBodies) {
+      b.bx = 0;
+      b.by = 0;
+      b.bvx = 0;
+      b.bvy = 0;
+      applyUiBumpStyle(b);
+    }
+    uiBodiesDirty = true;
+  }
+
+  /** Soft-push page UI away from held drag-dots; returns true while still settling. */
+  function updateUiBump(dt) {
+    if (reducedMotion || !revealed) return false;
+
+    if (uiBodiesDirty || !uiBodies.length) {
+      rebuildUiBodies();
+      uiBodiesDirty = false;
+    }
+
+    const heldDots = getHeldDots();
+    const canvasRect = canvas.getBoundingClientRect();
+    let active = heldDots.length > 0;
+
+    for (const b of uiBodies) {
+      let fx = 0;
+      let fy = 0;
+      const cx = b.hx + b.bx;
+      const cy = b.hy + b.by;
+
+      for (const h of heldDots) {
+        const hx = canvasRect.left + h.x;
+        const hy = canvasRect.top + h.y;
+        const a = bumpAccel(cx, cy, hx, hy, BUMP_UI_RADIUS, BUMP_UI_FORCE);
+        fx += a.ax;
+        fy += a.ay;
+      }
+
+      const ax = -b.bx * RETURN_STIFFNESS - b.bvx * RETURN_DAMPING + fx;
+      const ay = -b.by * RETURN_STIFFNESS - b.bvy * RETURN_DAMPING + fy;
+      b.bvx += ax * dt;
+      b.bvy += ay * dt;
+      b.bx += b.bvx * dt;
+      b.by += b.bvy * dt;
+
+      const mag = Math.hypot(b.bx, b.by);
+      if (mag > BUMP_UI_MAX) {
+        const s = BUMP_UI_MAX / mag;
+        b.bx *= s;
+        b.by *= s;
+      }
+
+      const dist = Math.hypot(b.bx, b.by);
+      const speed = Math.hypot(b.bvx, b.bvy);
+      if (heldDots.length === 0 && dist < 0.35 && speed < 8) {
+        b.bx = 0;
+        b.by = 0;
+        b.bvx = 0;
+        b.bvy = 0;
+      } else if (dist > 0.2 || speed > 4) {
+        active = true;
+      }
+
+      applyUiBumpStyle(b);
+    }
+
+    return active;
+  }
+
   function updateSettle(dt) {
+    const heldDots = reducedMotion ? [] : getHeldDots();
+
     for (const p of particles) {
       if (p.held) continue;
 
       if (p.returning) {
-        const ax = (p.tx - p.x) * RETURN_STIFFNESS - p.vx * RETURN_DAMPING;
-        const ay = (p.ty - p.y) * RETURN_STIFFNESS - p.vy * RETURN_DAMPING;
-        p.vx += ax * dt;
-        p.vy += ay * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
+        const bump = letterBumpAccel(p, heldDots);
+        springToward(p, p.tx, p.ty, dt, bump.ax, bump.ay);
         p.morph = Math.min(1, p.morph + dt * 6);
         const dist = Math.hypot(p.x - p.tx, p.y - p.ty);
         const speed = Math.hypot(p.vx, p.vy);
-        if (dist < 0.6 && speed < 12 && p.morph >= 0.98) {
+        if (dist < 0.6 && speed < 12 && p.morph >= 0.98 && !bump.hit) {
           p.x = p.tx;
           p.y = p.ty;
           p.vx = 0;
@@ -1028,11 +1200,12 @@
           p.morph = 1;
           p.formed = true;
           p.returning = false;
+          p.displaced = false;
         }
         continue;
       }
 
-      if (!p.formed) {
+      if (!p.formed && !p.displaced) {
         p.x += (p.tx - p.x) * Math.min(1, 18 * dt);
         p.y += (p.ty - p.y) * Math.min(1, 18 * dt);
         p.morph = Math.min(1, p.morph + dt * 10);
@@ -1043,10 +1216,38 @@
         }
         continue;
       }
+
+      const bump = letterBumpAccel(p, heldDots);
+      const away = Math.hypot(p.x - p.tx, p.y - p.ty) > 0.5 || Math.hypot(p.vx, p.vy) > 4;
+
+      if (bump.hit || p.displaced || away) {
+        p.displaced = true;
+        p.formed = true;
+        p.morph = 1;
+        springToward(p, p.tx, p.ty, dt, bump.ax, bump.ay);
+        p.heat *= 0.92;
+
+        const dist = Math.hypot(p.x - p.tx, p.y - p.ty);
+        const speed = Math.hypot(p.vx, p.vy);
+        if (!bump.hit && dist < 0.6 && speed < 12) {
+          p.x = p.tx;
+          p.y = p.ty;
+          p.vx = 0;
+          p.vy = 0;
+          p.morph = 1;
+          p.formed = true;
+          p.displaced = false;
+        }
+        continue;
+      }
+
       p.x = p.tx;
       p.y = p.ty;
+      p.vx = 0;
+      p.vy = 0;
       p.heat *= 0.92;
       p.morph = 1;
+      p.displaced = false;
     }
   }
 
@@ -1124,6 +1325,7 @@
       }
     } else {
       updateSettle(dt);
+      updateUiBump(dt);
       if (!revealed && allFormedOrHeld()) revealContent();
     }
 
@@ -1141,7 +1343,9 @@
       p.formed = true;
       p.heat = 0;
       p.returning = false;
+      p.displaced = false;
     }
+    resetUiBumps();
     draw();
     revealContent();
 

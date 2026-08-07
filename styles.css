@@ -266,6 +266,10 @@ html[data-theme="sepia"] body::after {
   line-height: 1.4;
   color: var(--fg-muted);
   text-align: center;
+  --bump-x: 0px;
+  --bump-y: 0px;
+  transform: translate(var(--bump-x), var(--bump-y));
+  will-change: transform;
 }
 
 .blurb-desktop {
@@ -333,6 +337,10 @@ html[data-theme="sepia"] body::after {
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
+  --bump-x: 0px;
+  --bump-y: 0px;
+  transform: translate(var(--bump-x), var(--bump-y));
+  will-change: transform;
 }
 
 .theme-toggle {
@@ -348,6 +356,10 @@ html[data-theme="sepia"] body::after {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  --bump-x: 0px;
+  --bump-y: 0px;
+  transform: translate(var(--bump-x), var(--bump-y));
+  will-change: transform;
 }
 
 .theme-toggle-value {
@@ -385,8 +397,11 @@ html[data-theme="sepia"] body::after {
   letter-spacing: 0.02em;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.25s var(--ease), border-color 0.25s var(--ease),
-    transform 0.25s var(--ease);
+  --bump-x: 0px;
+  --bump-y: 0px;
+  transform: translate(var(--bump-x), var(--bump-y));
+  will-change: transform;
+  transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
 }
 
 .btn:hover {
@@ -395,7 +410,7 @@ html[data-theme="sepia"] body::after {
 }
 
 .btn:active {
-  transform: translateY(1px);
+  transform: translate(var(--bump-x), calc(var(--bump-y) + 1px));
 }
 
 .icon-btn {
@@ -413,8 +428,11 @@ html[data-theme="sepia"] body::after {
   border-radius: 0.45rem;
   color: var(--fg);
   text-decoration: none;
-  transition: background 0.25s var(--ease), border-color 0.25s var(--ease),
-    transform 0.25s var(--ease);
+  --bump-x: 0px;
+  --bump-y: 0px;
+  transform: translate(var(--bump-x), var(--bump-y));
+  will-change: transform;
+  transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
 }
 
 .icon-btn svg {
@@ -437,7 +455,7 @@ html[data-theme="sepia"] body::after {
 }
 
 .icon-btn:active {
-  transform: translateY(1px);
+  transform: translate(var(--bump-x), calc(var(--bump-y) + 1px));
 }
 
 .btn:focus-visible,
