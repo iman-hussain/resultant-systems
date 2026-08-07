@@ -46,6 +46,10 @@
   const BUMP_UI_RADIUS = 130;
   const BUMP_UI_FORCE = 4200;
   const BUMP_UI_MAX = 56;
+  /** Per-glyph tagline bump (tighter than buttons). */
+  const BUMP_CHAR_RADIUS = 78;
+  const BUMP_CHAR_FORCE = 4800;
+  const BUMP_CHAR_MAX = 42;
 
   const PHASE = {
     ROAM: "roam",
@@ -73,7 +77,7 @@
   let snapHadDotsInContent = false;
   /**
    * DOM soft bodies displaced by a held drag-dot.
-   * @type {{ el: HTMLElement, hx: number, hy: number, bx: number, by: number, bvx: number, bvy: number }[]}
+   * @type {{ el: HTMLElement, kind: "char" | "ui", hx: number, hy: number, bx: number, by: number, bvx: number, bvy: number }[]}
    */
   let uiBodies = [];
   let uiBodiesDirty = true;
@@ -712,6 +716,7 @@
   }
 
   function fullRelayout() {
+    ensureBlurbCharsWrapped();
     const { newW, newH } = resizeCanvasOnly();
     width = newW;
     height = newH;
@@ -1066,19 +1071,66 @@
     p.y += p.vy * dt;
   }
 
+  function wrapBlurbTextNode(node) {
+    const text = node.nodeValue;
+    if (text == null || text.length === 0) return;
+    const frag = document.createDocumentFragment();
+    for (const ch of text) {
+      if (ch === "\n" || ch === "\r" || ch === " " || ch === "\t") {
+        frag.appendChild(document.createTextNode(ch));
+        continue;
+      }
+      const span = document.createElement("span");
+      span.className = "blurb-char";
+      span.textContent = ch;
+      frag.appendChild(span);
+    }
+    node.parentNode?.replaceChild(frag, node);
+  }
+
+  /** Split tagline glyphs into per-character spans for soft bump (once per blurb root). */
+  function ensureBlurbCharsWrapped() {
+    content.querySelectorAll(".blurb-desktop, .blurb-mobile").forEach((root) => {
+      if (!(root instanceof HTMLElement)) return;
+      if (root.dataset.charsWrapped === "true") return;
+      const texts = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) texts.push(walker.currentNode);
+      for (const node of texts) wrapBlurbTextNode(node);
+      root.dataset.charsWrapped = "true";
+    });
+  }
+
+  function visibleBlurbRoot() {
+    const desktop = content.querySelector(".blurb-desktop");
+    const mobile = content.querySelector(".blurb-mobile");
+    if (desktop instanceof HTMLElement && getComputedStyle(desktop).display !== "none") {
+      return desktop;
+    }
+    if (mobile instanceof HTMLElement && getComputedStyle(mobile).display !== "none") {
+      return mobile;
+    }
+    return desktop instanceof HTMLElement ? desktop : mobile instanceof HTMLElement ? mobile : null;
+  }
+
   function collectUiElements() {
-    /** @type {HTMLElement[]} */
-    const els = [];
-    const blurb = content.querySelector(".blurb");
-    if (blurb instanceof HTMLElement) els.push(blurb);
+    ensureBlurbCharsWrapped();
+    /** @type {{ el: HTMLElement, kind: "char" | "ui" }[]} */
+    const items = [];
+    const blurbRoot = visibleBlurbRoot();
+    if (blurbRoot) {
+      blurbRoot.querySelectorAll(".blurb-char").forEach((el) => {
+        if (el instanceof HTMLElement) items.push({ el, kind: "char" });
+      });
+    }
     content.querySelectorAll(".btn, .icon-btn").forEach((el) => {
-      if (el instanceof HTMLElement) els.push(el);
+      if (el instanceof HTMLElement) items.push({ el, kind: "ui" });
     });
     const company = document.getElementById("company-number");
     const theme = document.getElementById("theme-toggle");
-    if (company instanceof HTMLElement) els.push(company);
-    if (theme instanceof HTMLElement) els.push(theme);
-    return els;
+    if (company instanceof HTMLElement) items.push({ el: company, kind: "ui" });
+    if (theme instanceof HTMLElement) items.push({ el: theme, kind: "ui" });
+    return items;
   }
 
   function applyUiBumpStyle(body) {
@@ -1088,18 +1140,19 @@
 
   function rebuildUiBodies() {
     const prev = new Map(uiBodies.map((b) => [b.el, b]));
-    const els = collectUiElements();
-    for (const el of els) {
+    const items = collectUiElements();
+    for (const { el } of items) {
       el.style.setProperty("--bump-x", "0px");
       el.style.setProperty("--bump-y", "0px");
     }
     // Force layout with bumps cleared so homes stay stable
     void content.offsetHeight;
-    uiBodies = els.map((el) => {
+    uiBodies = items.map(({ el, kind }) => {
       const old = prev.get(el);
       const r = el.getBoundingClientRect();
       return {
         el,
+        kind,
         hx: r.left + r.width / 2,
         hy: r.top + r.height / 2,
         bx: old?.bx || 0,
@@ -1140,11 +1193,14 @@
       let fy = 0;
       const cx = b.hx + b.bx;
       const cy = b.hy + b.by;
+      const radius = b.kind === "char" ? BUMP_CHAR_RADIUS : BUMP_UI_RADIUS;
+      const force = b.kind === "char" ? BUMP_CHAR_FORCE : BUMP_UI_FORCE;
+      const maxDisp = b.kind === "char" ? BUMP_CHAR_MAX : BUMP_UI_MAX;
 
       for (const h of heldDots) {
         const hx = canvasRect.left + h.x;
         const hy = canvasRect.top + h.y;
-        const a = bumpAccel(cx, cy, hx, hy, BUMP_UI_RADIUS, BUMP_UI_FORCE);
+        const a = bumpAccel(cx, cy, hx, hy, radius, force);
         fx += a.ax;
         fy += a.ay;
       }
@@ -1157,8 +1213,8 @@
       b.by += b.bvy * dt;
 
       const mag = Math.hypot(b.bx, b.by);
-      if (mag > BUMP_UI_MAX) {
-        const s = BUMP_UI_MAX / mag;
+      if (mag > maxDisp) {
+        const s = maxDisp / mag;
         b.bx *= s;
         b.by *= s;
       }

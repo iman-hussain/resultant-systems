@@ -266,6 +266,10 @@ html[data-theme="sepia"] body::after {
   line-height: 1.4;
   color: var(--fg-muted);
   text-align: center;
+}
+
+.blurb-char {
+  display: inline-block;
   --bump-x: 0px;
   --bump-y: 0px;
   transform: translate(var(--bump-x), var(--bump-y));
