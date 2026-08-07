@@ -131,7 +131,12 @@
     if (themeToggle) {
       const label = THEME_LABELS[mode];
       const valueEl = themeToggle.querySelector(".theme-toggle-value");
-      if (valueEl) valueEl.textContent = label;
+      if (valueEl) {
+        valueEl.textContent = label;
+        delete valueEl.dataset.charsWrapped;
+        wrapCharsInRoot(valueEl, { force: true });
+        uiBodiesDirty = true;
+      }
       themeToggle.setAttribute(
         "aria-label",
         `Colour theme: ${label}. Click to cycle Auto, Dark, Sepia, Light.`
@@ -716,7 +721,7 @@
   }
 
   function fullRelayout() {
-    ensureBlurbCharsWrapped();
+    ensureBumpCharsWrapped();
     const { newW, newH } = resizeCanvasOnly();
     width = newW;
     height = newH;
@@ -1071,7 +1076,7 @@
     p.y += p.vy * dt;
   }
 
-  function wrapBlurbTextNode(node) {
+  function wrapTextNodeAsChars(node) {
     const text = node.nodeValue;
     if (text == null || text.length === 0) return;
     const frag = document.createDocumentFragment();
@@ -1081,24 +1086,38 @@
         continue;
       }
       const span = document.createElement("span");
-      span.className = "blurb-char";
+      span.className = "bump-char";
       span.textContent = ch;
       frag.appendChild(span);
     }
     node.parentNode?.replaceChild(frag, node);
   }
 
-  /** Split tagline glyphs into per-character spans for soft bump (once per blurb root). */
-  function ensureBlurbCharsWrapped() {
-    content.querySelectorAll(".blurb-desktop, .blurb-mobile").forEach((root) => {
-      if (!(root instanceof HTMLElement)) return;
-      if (root.dataset.charsWrapped === "true") return;
-      const texts = [];
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) texts.push(walker.currentNode);
-      for (const node of texts) wrapBlurbTextNode(node);
-      root.dataset.charsWrapped = "true";
+  function wrapCharsInRoot(root, { force = false } = {}) {
+    if (!(root instanceof HTMLElement)) return;
+    if (!force && root.dataset.charsWrapped === "true") return;
+    const texts = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (node.parentElement?.classList.contains("bump-char")) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
     });
+    while (walker.nextNode()) texts.push(walker.currentNode);
+    for (const node of texts) wrapTextNodeAsChars(node);
+    root.dataset.charsWrapped = "true";
+  }
+
+  /** Split blurb / footer text into per-character spans for soft bump. */
+  function ensureBumpCharsWrapped() {
+    content.querySelectorAll(".blurb-desktop, .blurb-mobile").forEach((root) => {
+      wrapCharsInRoot(root);
+    });
+    const company = document.getElementById("company-number");
+    if (company) wrapCharsInRoot(company);
+    if (themeToggle) wrapCharsInRoot(themeToggle);
   }
 
   function visibleBlurbRoot() {
@@ -1113,23 +1132,34 @@
     return desktop instanceof HTMLElement ? desktop : mobile instanceof HTMLElement ? mobile : null;
   }
 
+  function collectCharBumpElements(root) {
+    /** @type {HTMLElement[]} */
+    const chars = [];
+    if (!(root instanceof HTMLElement)) return chars;
+    root.querySelectorAll(".bump-char").forEach((el) => {
+      if (el instanceof HTMLElement) chars.push(el);
+    });
+    return chars;
+  }
+
   function collectUiElements() {
-    ensureBlurbCharsWrapped();
+    ensureBumpCharsWrapped();
     /** @type {{ el: HTMLElement, kind: "char" | "ui" }[]} */
     const items = [];
     const blurbRoot = visibleBlurbRoot();
-    if (blurbRoot) {
-      blurbRoot.querySelectorAll(".blurb-char").forEach((el) => {
-        if (el instanceof HTMLElement) items.push({ el, kind: "char" });
-      });
+    for (const el of collectCharBumpElements(blurbRoot)) {
+      items.push({ el, kind: "char" });
     }
     content.querySelectorAll(".btn, .icon-btn").forEach((el) => {
       if (el instanceof HTMLElement) items.push({ el, kind: "ui" });
     });
     const company = document.getElementById("company-number");
-    const theme = document.getElementById("theme-toggle");
-    if (company instanceof HTMLElement) items.push({ el: company, kind: "ui" });
-    if (theme instanceof HTMLElement) items.push({ el: theme, kind: "ui" });
+    for (const el of collectCharBumpElements(company)) {
+      items.push({ el, kind: "char" });
+    }
+    for (const el of collectCharBumpElements(themeToggle)) {
+      items.push({ el, kind: "char" });
+    }
     return items;
   }
 

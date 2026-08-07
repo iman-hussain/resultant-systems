@@ -268,7 +268,8 @@ html[data-theme="sepia"] body::after {
   text-align: center;
 }
 
-.blurb-char {
+.blurb-char,
+.bump-char {
   display: inline-block;
   --bump-x: 0px;
   --bump-y: 0px;
@@ -341,10 +342,6 @@ html[data-theme="sepia"] body::after {
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
-  --bump-x: 0px;
-  --bump-y: 0px;
-  transform: translate(var(--bump-x), var(--bump-y));
-  will-change: transform;
 }
 
 .theme-toggle {
@@ -360,10 +357,6 @@ html[data-theme="sepia"] body::after {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  --bump-x: 0px;
-  --bump-y: 0px;
-  transform: translate(var(--bump-x), var(--bump-y));
-  will-change: transform;
 }
 
 .theme-toggle-value {
