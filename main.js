@@ -283,10 +283,22 @@
   }
 
   /** One target per glyph; lowercase “i” becomes body (ı) + separate tittle. */
-  function pushGlyphTargets(letters, char, tx, ty, fontSize) {
+  function pushGlyphTargets(letters, char, tx, ty, fontSize, meta) {
+    const { lineKey, glyphKey, slotWidth } = meta;
     if (char === "i") {
       const { radius, offsetX, offsetY } = iTittleMetrics(fontSize);
-      letters.push({ char: "ı", tx, ty, fontSize, tittle: false });
+      letters.push({
+        char: "ı",
+        tx,
+        ty,
+        fontSize,
+        tittle: false,
+        glyphKey,
+        lineKey,
+        slotWidth,
+        relX: 0,
+        relY: 0,
+      });
       letters.push({
         char: "i",
         tx: tx + offsetX,
@@ -294,10 +306,26 @@
         fontSize,
         tittle: true,
         tittleR: radius,
+        glyphKey,
+        lineKey,
+        slotWidth: 0,
+        relX: offsetX,
+        relY: offsetY,
       });
       return;
     }
-    letters.push({ char, tx, ty, fontSize, tittle: false });
+    letters.push({
+      char,
+      tx,
+      ty,
+      fontSize,
+      tittle: false,
+      glyphKey,
+      lineKey,
+      slotWidth,
+      relX: 0,
+      relY: 0,
+    });
   }
 
   function widestLineWidth(probe, lines, size) {
@@ -344,7 +372,11 @@
         if (char === " ") continue;
         const before = measureLine(probe, line.slice(0, i), fontSize);
         const after = measureLine(probe, line.slice(0, i + 1), fontSize);
-        pushGlyphTargets(letters, char, lineStart + (before + after) / 2, y, fontSize);
+        pushGlyphTargets(letters, char, lineStart + (before + after) / 2, y, fontSize, {
+          lineKey: `L${lineIndex}`,
+          glyphKey: `${lineIndex}:${i}`,
+          slotWidth: measureLine(probe, char, fontSize),
+        });
       }
     });
 
@@ -447,7 +479,11 @@
         if (char === " ") continue;
         const before = measureLine(probe, line.slice(0, i), fontSize);
         const after = measureLine(probe, line.slice(0, i + 1), fontSize);
-        pushGlyphTargets(letters, char, lineStart + (before + after) / 2, y, fontSize);
+        pushGlyphTargets(letters, char, lineStart + (before + after) / 2, y, fontSize, {
+          lineKey: `L${lineIndex}`,
+          glyphKey: `${lineIndex}:${i}`,
+          slotWidth: measureLine(probe, char, fontSize),
+        });
       }
     });
 
@@ -608,17 +644,39 @@
     blurb.style.fontSize = `${lo.toFixed(2)}px`;
   }
 
+  function applyTargetMeta(p, t) {
+    p.char = t.char;
+    p.tittle = !!t.tittle;
+    p.tx = t.tx;
+    p.ty = t.ty;
+    p.homeTx = t.tx;
+    p.homeTy = t.ty;
+    p.fontSize = t.fontSize;
+    p.glyphKey = t.glyphKey;
+    p.lineKey = t.lineKey;
+    p.slotWidth = t.slotWidth || 0;
+    p.relX = t.relX || 0;
+    p.relY = t.relY || 0;
+  }
+
   function createParticles() {
     const targets = buildLetterTargets();
     particles = targets.map((t) => {
       const angle = Math.random() * Math.PI * 2;
       const speed = 14 + Math.random() * 22;
-      return {
+      const p = {
         char: t.char,
         tittle: !!t.tittle,
         tx: t.tx,
         ty: t.ty,
+        homeTx: t.tx,
+        homeTy: t.ty,
         fontSize: t.fontSize,
+        glyphKey: t.glyphKey,
+        lineKey: t.lineKey,
+        slotWidth: t.slotWidth || 0,
+        relX: t.relX || 0,
+        relY: t.relY || 0,
         x: Math.random() * width,
         y: Math.random() * height,
         vx: Math.cos(angle) * speed,
@@ -627,11 +685,13 @@
         oy: null,
         heat: 0,
         held: false,
+        absorbed: false,
         formed: false,
         morph: 0,
         returning: false,
         displaced: false,
       };
+      return p;
     });
   }
 
@@ -653,13 +713,7 @@
     const usedP = new Set();
     for (const { pi, ti } of pairs) {
       if (usedP.has(pi) || slots[ti].taken) continue;
-      const p = particles[pi];
-      const t = slots[ti];
-      p.char = t.char;
-      p.tittle = !!t.tittle;
-      p.tx = t.tx;
-      p.ty = t.ty;
-      p.fontSize = t.fontSize;
+      applyTargetMeta(particles[pi], slots[ti]);
       slots[ti].taken = true;
       usedP.add(pi);
       if (usedP.size === particles.length) break;
@@ -675,6 +729,7 @@
           p.y = p.ty;
           p.morph = 1;
           p.formed = true;
+          p.absorbed = false;
         }
       }
       return;
@@ -682,17 +737,27 @@
     particles.forEach((p, i) => {
       const t = targets[i];
       if (!t) return;
-      p.char = t.char;
-      p.tittle = !!t.tittle;
-      p.tx = t.tx;
-      p.ty = t.ty;
-      p.fontSize = t.fontSize;
+      const wasHeld = p.held;
+      const wasAbsorbed = p.absorbed;
+      const wasReturning = p.returning;
+      applyTargetMeta(p, t);
+      if (wasHeld || wasAbsorbed || wasReturning) {
+        p.held = wasHeld;
+        p.absorbed = wasAbsorbed;
+        p.returning = wasReturning;
+        if (wasHeld || wasAbsorbed) {
+          p.formed = false;
+          p.morph = 0;
+        }
+        return;
+      }
       if (p.formed || phase === PHASE.SETTLE) {
         p.x = p.tx;
         p.y = p.ty;
         p.morph = 1;
         p.formed = true;
         p.displaced = false;
+        p.absorbed = false;
         p.vx = 0;
         p.vy = 0;
       }
@@ -783,6 +848,7 @@
     let best = null;
     let bestDist = Infinity;
     for (const p of particles) {
+      if (p.absorbed) continue;
       if (isParticleClaimed(p)) continue;
       if (forSettleDrag) {
         if (p.returning || p.held) continue;
@@ -875,6 +941,9 @@
       p.formed = false;
       p.morph = 0;
       p.returning = false;
+      p.absorbed = false;
+      absorbGlyphSiblings(p);
+      refreshWordmarkSpringTargets();
       window.getSelection()?.removeAllRanges();
       updateWordmarkDraggingState();
     }
@@ -912,10 +981,13 @@
         p.held = false;
         p.returning = true;
         p.formed = false;
+        p.absorbed = false;
         p.ox = p.x;
         p.oy = p.y;
         p.vx = 0;
         p.vy = 0;
+        releaseAbsorbedSiblings(p);
+        refreshWordmarkSpringTargets();
       }
       // Tap without drag: leave letter in place (selection may copy)
     } else {
@@ -1040,6 +1112,182 @@
       if (p.held) held.push(p);
     }
     return held;
+  }
+
+  /** Glyph keys currently pulled out of the wordmark (held or absorbed siblings). */
+  function removedGlyphKeys() {
+    const keys = new Set();
+    for (const p of particles) {
+      if (p.held || p.absorbed) keys.add(p.glyphKey);
+    }
+    return keys;
+  }
+
+  function absorbGlyphSiblings(lead) {
+    for (const p of particles) {
+      if (p === lead || p.glyphKey !== lead.glyphKey) continue;
+      p.absorbed = true;
+      p.held = false;
+      p.formed = false;
+      p.morph = 0;
+      p.returning = false;
+      p.displaced = false;
+      p.x = lead.x;
+      p.y = lead.y;
+      p.vx = 0;
+      p.vy = 0;
+    }
+  }
+
+  function releaseAbsorbedSiblings(lead) {
+    for (const p of particles) {
+      if (p === lead || p.glyphKey !== lead.glyphKey || !p.absorbed) continue;
+      p.absorbed = false;
+      p.returning = true;
+      p.formed = false;
+      p.held = false;
+      p.morph = 0;
+      p.ox = lead.x;
+      p.oy = lead.y;
+      p.x = lead.x;
+      p.y = lead.y;
+      p.vx = 0;
+      p.vy = 0;
+      p.tx = p.homeTx;
+      p.ty = p.homeTy;
+    }
+  }
+
+  function followAbsorbedParticles() {
+    for (const p of particles) {
+      if (!p.absorbed) continue;
+      let lead = null;
+      for (const q of particles) {
+        if (q.held && q.glyphKey === p.glyphKey) {
+          lead = q;
+          break;
+        }
+      }
+      if (!lead) continue;
+      p.x = lead.x;
+      p.y = lead.y;
+      p.vx = 0;
+      p.vy = 0;
+      p.morph = 0;
+      p.formed = false;
+    }
+  }
+
+  /**
+   * While a letter is pulled out, close the gap on its line (keep original
+   * neighbor spacing, recenter the remaining glyphs). On release, restore homes
+   * so neighbors open for the returning letter.
+   */
+  function refreshWordmarkSpringTargets() {
+    const removed = removedGlyphKeys();
+    /** @type {Map<string, object[]>} */
+    const byLine = new Map();
+    for (const p of particles) {
+      if (p.tittle) continue;
+      const key = p.lineKey || "L0";
+      if (!byLine.has(key)) byLine.set(key, []);
+      byLine.get(key).push(p);
+    }
+
+    for (const bodies of byLine.values()) {
+      bodies.sort((a, b) => a.homeTx - b.homeTx);
+      const present = bodies.filter((p) => !removed.has(p.glyphKey));
+
+      if (!present.length || removed.size === 0 || present.length === bodies.length) {
+        for (const p of bodies) {
+          if (p.held || p.absorbed) {
+            p.tx = p.homeTx;
+            p.ty = p.homeTy;
+            continue;
+          }
+          if (p.tx !== p.homeTx || p.ty !== p.homeTy) {
+            p.displaced = true;
+            p.formed = true;
+            p.morph = 1;
+          }
+          p.tx = p.homeTx;
+          p.ty = p.homeTy;
+        }
+        continue;
+      }
+
+      const rel = [0];
+      for (let i = 1; i < present.length; i++) {
+        let delta = present[i].homeTx - present[i - 1].homeTx;
+        for (const b of bodies) {
+          if (
+            removed.has(b.glyphKey) &&
+            b.homeTx > present[i - 1].homeTx &&
+            b.homeTx < present[i].homeTx
+          ) {
+            delta -= b.slotWidth;
+          }
+        }
+        const minGap = Math.max(present[i].slotWidth, present[i - 1].slotWidth) * 0.35;
+        rel.push(rel[i - 1] + Math.max(delta, minGap));
+      }
+
+      const oldCenter = (bodies[0].homeTx + bodies[bodies.length - 1].homeTx) / 2;
+      const origin = present[0].homeTx;
+      const absFirst = origin + rel[0];
+      const absLast = origin + rel[rel.length - 1];
+      const shift = oldCenter - (absFirst + absLast) / 2;
+
+      for (let i = 0; i < present.length; i++) {
+        const p = present[i];
+        const nextTx = origin + rel[i] + shift;
+        const nextTy = p.homeTy;
+        if (Math.hypot(nextTx - p.tx, nextTy - p.ty) > 0.25) {
+          p.displaced = true;
+          p.formed = true;
+          p.morph = 1;
+        }
+        p.tx = nextTx;
+        p.ty = nextTy;
+      }
+
+      for (const p of bodies) {
+        if (!removed.has(p.glyphKey)) continue;
+        p.tx = p.homeTx;
+        p.ty = p.homeTy;
+      }
+    }
+
+    for (const p of particles) {
+      if (!p.tittle) continue;
+      if (p.held || p.absorbed || p.returning) {
+        p.tx = p.homeTx;
+        p.ty = p.homeTy;
+        continue;
+      }
+      if (removed.has(p.glyphKey)) {
+        p.tx = p.homeTx;
+        p.ty = p.homeTy;
+        continue;
+      }
+      let body = null;
+      for (const q of particles) {
+        if (!q.tittle && q.glyphKey === p.glyphKey) {
+          body = q;
+          break;
+        }
+      }
+      if (!body) continue;
+      const nextTx = body.tx + p.relX;
+      const nextTy = body.ty + p.relY;
+      if (Math.hypot(nextTx - p.tx, nextTy - p.ty) > 0.25) {
+        p.displaced = true;
+        p.formed = true;
+        p.morph = 1;
+      }
+      p.tx = nextTx;
+      p.ty = nextTy;
+    }
   }
 
   /** Radial repulsion acceleration from (hx,hy) onto a point at (px,py). */
@@ -1267,10 +1515,15 @@
   }
 
   function updateSettle(dt) {
+    if (!reducedMotion) {
+      followAbsorbedParticles();
+      refreshWordmarkSpringTargets();
+    }
+
     const heldDots = reducedMotion ? [] : getHeldDots();
 
     for (const p of particles) {
-      if (p.held) continue;
+      if (p.held || p.absorbed) continue;
 
       if (p.returning) {
         const bump = letterBumpAccel(p, heldDots);
@@ -1338,6 +1591,7 @@
   }
 
   function drawParticle(p) {
+    if (p.absorbed) return;
     const fill = p.heat > 0.04 ? mix(colors.dot, colors.hot, p.heat) : colors.dot;
     ctx.fillStyle = fill;
     ctx.globalAlpha = 1;
@@ -1385,7 +1639,7 @@
   }
 
   function allFormedOrHeld() {
-    return particles.every((p) => p.formed || p.held);
+    return particles.every((p) => p.formed || p.held || p.absorbed);
   }
 
   function tick(now) {
@@ -1430,6 +1684,7 @@
       p.heat = 0;
       p.returning = false;
       p.displaced = false;
+      p.absorbed = false;
     }
     resetUiBumps();
     draw();
